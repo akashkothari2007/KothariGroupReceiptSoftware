@@ -47,7 +47,7 @@ function ShimmerCards({ count = 6 }) {
   )
 }
 
-function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry }) {
+function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch }) {
   const [fileUrl, setFileUrl] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
   const [fields, setFields] = useState({})
@@ -184,6 +184,26 @@ function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry }) {
                   {receipt.tx_merchant || 'Transaction'} — {receipt.tx_amount != null ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(receipt.tx_amount) : ''}
                   {receipt.tx_date ? ` (${receipt.tx_date})` : ''}
                 </span>
+              </div>
+            )}
+            {receipt.processing_status === 'completed' && (
+              <div className="meta-row" style={{ gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #333', paddingTop: 10, marginTop: 4 }}>
+                {receipt.transaction_id && onUnmatch && (
+                  <button
+                    style={{ padding: '5px 14px', fontSize: 12, background: '#dc3545', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                    onClick={() => onUnmatch(receipt.id)}
+                  >
+                    Unmatch
+                  </button>
+                )}
+                {onRematch && (
+                  <button
+                    style={{ padding: '5px 14px', fontSize: 12, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                    onClick={() => onRematch(receipt.id)}
+                  >
+                    {receipt.transaction_id ? 'Re-match' : 'Find Match'}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -530,6 +550,42 @@ function App() {
     } catch {
       setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, processing_status: 'failed' } : r))
     }
+  }
+
+  const handleReceiptUnmatch = async (receiptId) => {
+    // Optimistic: clear match locally
+    setReceipts(prev => prev.map(r => r.id === receiptId
+      ? { ...r, transaction_id: null, match_status: 'unmatched', tx_merchant: null, tx_amount: null, tx_date: null }
+      : r
+    ))
+    setSelectedReceipt(prev => prev && prev.id === receiptId
+      ? { ...prev, transaction_id: null, match_status: 'unmatched', tx_merchant: null, tx_amount: null, tx_date: null }
+      : prev
+    )
+    // Also refresh transactions if viewing a statement
+    try {
+      await fetch(`${API}/receipts/${receiptId}/match`, { method: 'DELETE' })
+      if (currentId) fetchTransactions(currentId, true)
+    } catch {}
+  }
+
+  const handleReceiptRematch = async (receiptId) => {
+    try {
+      await fetch(`${API}/receipts/${receiptId}/rematch`, { method: 'POST' })
+      // Poll receipts to pick up the new match
+      setTimeout(async () => {
+        try {
+          const res = await fetch(`${API}/receipts`)
+          const data = await res.json()
+          setReceipts(data)
+          setSelectedReceipt(prev => {
+            if (!prev || prev.id !== receiptId) return prev
+            return data.find(r => r.id === receiptId) || prev
+          })
+          if (currentId) fetchTransactions(currentId, true)
+        } catch {}
+      }, 2000)
+    } catch {}
   }
 
   // ── Formatters ──
@@ -920,6 +976,8 @@ function App() {
           receipt={selectedReceipt}
           onClose={() => setSelectedReceipt(null)}
           onRetry={(id) => { handleReceiptRetry(id); setSelectedReceipt(null) }}
+          onUnmatch={(id) => handleReceiptUnmatch(id)}
+          onRematch={(id) => handleReceiptRematch(id)}
           onUpdate={(id, field, value) => {
             const parsed = ['subtotal', 'tax_amount', 'total_amount'].includes(field) && value !== ''
               ? parseFloat(value) : value

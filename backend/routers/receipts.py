@@ -3,6 +3,7 @@ import os
 import re
 import asyncio
 import logging
+import threading
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -10,6 +11,8 @@ from sqlalchemy import text
 from supabase import create_client
 from db import engine
 from services.receipt_extractor import extract_receipt_data
+from services.match_run import run_matching_for_receipt
+from services.match_writer import remove_match
 
 logger = logging.getLogger("receipts")
 router = APIRouter(prefix="/receipts", tags=["receipts"])
@@ -201,6 +204,9 @@ class ReceiptUpdate(BaseModel):
     processing_status: Optional[str] = None
 
 
+MATCH_RELEVANT_FIELDS = {"merchant_name", "receipt_date", "total_amount", "country"}
+
+
 @router.patch("/{receipt_id}")
 def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
     fields = {k: v for k, v in updates.model_dump().items() if v is not None and k in RECEIPT_ALLOWED_FIELDS}
@@ -208,12 +214,15 @@ def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
         return {"updated": False}
 
     with engine.begin() as conn:
-        exists = conn.execute(
-            text("SELECT 1 FROM receipts WHERE id = :id"),
+        row = conn.execute(
+            text("SELECT transaction_id, processing_status FROM receipts WHERE id = :id"),
             {"id": receipt_id},
         ).fetchone()
-        if not exists:
+        if not row:
             raise HTTPException(status_code=404, detail="Receipt not found")
+
+        is_unmatched = row[0] is None
+        is_completed = row[1] == "completed"
 
         params = {"rid": receipt_id}
         set_parts = []
@@ -226,6 +235,17 @@ def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
 
         query = f"UPDATE receipts SET {', '.join(set_parts)} WHERE id = :rid"
         conn.execute(text(query), params)
+
+    # Auto-rematch if user edited a matching-relevant field and receipt is unmatched
+    edited_match_fields = set(fields.keys()) & MATCH_RELEVANT_FIELDS
+    if edited_match_fields and is_unmatched and is_completed:
+        def _bg():
+            try:
+                run_matching_for_receipt(receipt_id)
+            except Exception as e:
+                logger.error(f"Auto-rematch after edit failed for {receipt_id}: {e}", exc_info=True)
+        threading.Thread(target=_bg, daemon=True).start()
+        return {"updated": True, "rematching": True}
 
     return {"updated": True}
 
@@ -262,6 +282,49 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
     logger.info(f"Retrying extraction for receipt {receipt_id}")
     background_tasks.add_task(_run_extraction_bg, receipt_id, row[0], row[1])
     return {"retrying": True, "receipt_id": receipt_id}
+
+
+@router.post("/{receipt_id}/rematch")
+def rematch_receipt(receipt_id: str):
+    """Re-run matching for this receipt against all transactions."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT processing_status FROM receipts WHERE id = :id"),
+            {"id": receipt_id},
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    if row[0] != "completed":
+        raise HTTPException(status_code=400, detail=f"Receipt is {row[0]}, not matchable")
+
+    def _bg():
+        try:
+            matches = run_matching_for_receipt(receipt_id)
+            logger.info(f"Rematch for {receipt_id}: {len(matches)} match(es)")
+        except Exception as e:
+            logger.error(f"Rematch failed for {receipt_id}: {e}", exc_info=True)
+
+    threading.Thread(target=_bg, daemon=True).start()
+    return {"rematching": True}
+
+
+@router.delete("/{receipt_id}/match")
+def unmatch_receipt(receipt_id: str):
+    """Remove the match on this receipt (unlinks from transaction)."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT transaction_id FROM receipts WHERE id = :id"),
+            {"id": receipt_id},
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    if not row[0]:
+        raise HTTPException(status_code=400, detail="Receipt is not matched")
+
+    ok = remove_match(str(row[0]))
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to remove match")
+    return {"unmatched": True}
 
 
 @router.get("/{receipt_id}/url")
