@@ -457,19 +457,21 @@ function App() {
 
   // ── Receipts handlers ──
   const handleReceiptUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+    const files = Array.from(e.target.files)
+    if (!files.length) return
     setUploadingReceipt(true)
-    const form = new FormData()
-    form.append('file', file)
-    try {
-      const res = await fetch(`${API}/receipts/upload`, { method: 'POST', body: form })
-      if (!res.ok) throw new Error('Upload failed')
-      const data = await res.json()
-      data.processing_status = 'processing'
-      setReceipts(prev => [data, ...prev])
-    } catch (err) {
-      alert('Receipt upload failed: ' + err.message)
+    for (const file of files) {
+      const form = new FormData()
+      form.append('file', file)
+      try {
+        const res = await fetch(`${API}/receipts/upload`, { method: 'POST', body: form })
+        if (!res.ok) throw new Error(`Upload failed: ${file.name}`)
+        const data = await res.json()
+        data.processing_status = 'processing'
+        setReceipts(prev => [data, ...prev])
+      } catch (err) {
+        alert(err.message)
+      }
     }
     setUploadingReceipt(false)
     receiptFileRef.current.value = ''
@@ -755,7 +757,7 @@ function App() {
             <input
               ref={receiptFileRef}
               type="file"
-              accept="image/jpeg,image/png,application/pdf,image/heic,image/heif"
+              accept="image/jpeg,image/png,application/pdf,image/heic,image/heif" multiple
               onChange={handleReceiptUpload}
               hidden
             />

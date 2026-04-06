@@ -13,9 +13,11 @@ Return ONLY valid JSON with these exact keys:
 
 Rules:
 - All dollar amounts as numbers (no $ sign), null if not found
-- tax_type: use "HST" for Ontario (13%), "GST" for Alberta (5%), "GST+PST" for BC (5%+7%), "none" if no tax or foreign
-- country: "CA" for Canada, "US" for United States, 2-letter ISO code for others
-- If the receipt is foreign (not Canadian), set tax_amount to 0 and tax_type to "none"
+- If the total contains credits or non-monetary items, extract only the dollar amount (e.g. "4 Credits + $322.93" → 322.93)
+- For airline/travel confirmations, look for the total fare or grand total charged — it may be on a different page
+- tax_type: use "HST" for Ontario (13%), "GST" for Alberta (5%), "GST+PST" for BC (5%+7%), "GST+QST" for Quebec, "none" if no tax or foreign
+- country: DEFAULT TO "CA" (Canada). Only use a different country code if there is CLEAR evidence the business is foreign (e.g. US address, USD currency explicitly stated, non-Canadian phone format). Canadian cities, provinces, or $ amounts alone are NOT evidence of being foreign — Canada uses $ too.
+- If the receipt is clearly foreign (not Canadian), set tax_amount to 0 and tax_type to "none"
 - receipt_date must be YYYY-MM-DD format or null
 - Return ONLY the JSON object, no markdown, no explanation
 """

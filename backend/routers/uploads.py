@@ -27,12 +27,22 @@ def parse_amount(amount_str: str):
 
 
 def parse_foreign_amount(val: str):
-    """Parse '500.00 USD' → (500.00, 'USD')."""
+    """Parse '500.00 USD' or '228.000,00 TRY' or '2,295.00 USD' → (float, currency)."""
     if not val or not val.strip():
         return None, None
     parts = val.strip().split()
     if len(parts) == 2:
-        return float(parts[0]), parts[1]
+        num_str = parts[0]
+        # European format: 228.000,00 (dots=thousands, comma=decimal)
+        if ',' in num_str and num_str.rfind(',') > num_str.rfind('.'):
+            num_str = num_str.replace('.', '').replace(',', '.')
+        else:
+            # Standard format: 2,295.00 (commas=thousands)
+            num_str = num_str.replace(',', '')
+        try:
+            return float(num_str), parts[1]
+        except ValueError:
+            return None, None
     return None, None
 
 

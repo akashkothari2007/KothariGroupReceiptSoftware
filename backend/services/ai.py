@@ -15,28 +15,32 @@ AZURE_VISION_API_KEY = os.getenv("AZURE_VISION_API_KEY")
 MAX_RETRIES = 3
 
 
-async def call_azure_vision(image_bytes: bytes, prompt: str, mime_type: str = "image/png") -> dict:
+async def call_azure_vision(image_bytes, prompt: str, mime_type: str = "image/png") -> dict:
     """
-    Send an image to Azure OpenAI GPT-4o vision and get structured JSON back.
+    Send image(s) to Azure OpenAI GPT-4o vision and get structured JSON back.
+    Accepts a single bytes object or a list of bytes (multi-page).
     Retries up to 3 times on failure.
     """
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
+    # Normalize to list for multi-image support
+    if isinstance(image_bytes, list):
+        images = image_bytes
+    else:
+        images = [image_bytes]
+
+    content = [{"type": "text", "text": prompt}]
+    total_bytes = 0
+    for img in images:
+        b64_image = base64.b64encode(img).decode("utf-8")
+        total_bytes += len(img)
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:{mime_type};base64,{b64_image}",
+            },
+        })
 
     payload = {
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{b64_image}",
-                        },
-                    },
-                ],
-            }
-        ],
+        "messages": [{"role": "user", "content": content}],
         "max_tokens": 1000,
     }
 
@@ -45,7 +49,7 @@ async def call_azure_vision(image_bytes: bytes, prompt: str, mime_type: str = "i
         "api-key": AZURE_VISION_API_KEY,
     }
 
-    logger.info(f"Azure vision call — {len(image_bytes)} bytes, mime={mime_type}, url={AZURE_VISION_API_URL}")
+    logger.info(f"Azure vision call — {len(images)} image(s), {total_bytes} bytes total, mime={mime_type}, url={AZURE_VISION_API_URL}")
 
     last_error = None
     for attempt in range(MAX_RETRIES):

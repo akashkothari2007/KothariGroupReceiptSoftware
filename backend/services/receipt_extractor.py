@@ -14,14 +14,15 @@ from services.match_run import run_matching_for_receipt
 logger = logging.getLogger("receipt_extractor")
 
 
-def pdf_first_page_to_png(pdf_bytes: bytes) -> bytes:
-    """Convert first page of a PDF to PNG bytes."""
+def pdf_to_pngs(pdf_bytes: bytes, max_pages: int = 5) -> list[bytes]:
+    """Convert all pages of a PDF to PNG bytes (up to max_pages)."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc[0]
-    pix = page.get_pixmap(dpi=200)
-    png_bytes = pix.tobytes("png")
+    pages = []
+    for i in range(min(len(doc), max_pages)):
+        pix = doc[i].get_pixmap(dpi=200)
+        pages.append(pix.tobytes("png"))
     doc.close()
-    return png_bytes
+    return pages
 
 
 def heic_to_png(heic_bytes: bytes) -> bytes:
@@ -74,10 +75,14 @@ async def extract_receipt_data(receipt_id: str, storage_path: str, file_type: st
 
         # Convert to PNG if needed
         if file_type == "application/pdf":
-            logger.info(f"[{receipt_id}] Converting PDF to PNG...")
-            image_bytes = pdf_first_page_to_png(file_bytes)
+            logger.info(f"[{receipt_id}] Converting PDF pages to PNG...")
+            page_images = pdf_to_pngs(file_bytes)
+            logger.info(f"[{receipt_id}] PDF converted — {len(page_images)} page(s)")
+            if len(page_images) == 1:
+                image_bytes = page_images[0]
+            else:
+                image_bytes = page_images  # list of bytes → multi-image AI call
             mime_type = "image/png"
-            logger.info(f"[{receipt_id}] PDF converted — {len(image_bytes)} bytes")
         elif file_type in ("image/heic", "image/heif"):
             logger.info(f"[{receipt_id}] Converting HEIC to PNG...")
             image_bytes = heic_to_png(file_bytes)
