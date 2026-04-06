@@ -47,7 +47,7 @@ function ShimmerCards({ count = 6 }) {
   )
 }
 
-function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch }) {
+function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch, onConfirmMatch }) {
   const [fileUrl, setFileUrl] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
   const [fields, setFields] = useState({})
@@ -194,6 +194,14 @@ function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, on
                     onClick={() => onUnmatch(receipt.id)}
                   >
                     Unmatch
+                  </button>
+                )}
+                {receipt.match_status === 'matched_unsure' && receipt.transaction_id && onConfirmMatch && (
+                  <button
+                    style={{ padding: '5px 14px', fontSize: 12, background: '#16a34a', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                    onClick={() => onConfirmMatch(receipt.id)}
+                  >
+                    Confirm Match
                   </button>
                 )}
                 {onRematch && (
@@ -588,6 +596,19 @@ function App() {
     } catch {}
   }
 
+  const handleConfirmMatch = async (receiptId) => {
+    setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, match_status: 'matched_sure' } : r))
+    setSelectedReceipt(prev => prev && prev.id === receiptId ? { ...prev, match_status: 'matched_sure' } : prev)
+    setTransactions(prev => prev.map(t => t.matched_receipt_id === receiptId ? { ...t, match_status: 'matched_sure' } : t))
+    try {
+      await fetch(`${API}/receipts/${receiptId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ match_status: 'matched_sure' }),
+      })
+    } catch {}
+  }
+
   // ── Formatters ──
   const formatDate = (d) => {
     if (!d) return ''
@@ -782,6 +803,13 @@ function App() {
                               >
                                 {tx.receipt_merchant || tx.receipt_file_name || 'Matched'}
                               </span>
+                              {tx.match_status === 'matched_unsure' && (
+                                <button
+                                  className="receipt-confirm-btn"
+                                  onClick={() => handleConfirmMatch(tx.matched_receipt_id)}
+                                  title="Confirm match"
+                                >&#x2713;</button>
+                              )}
                               <button
                                 className="receipt-unmatch-btn"
                                 onClick={() => handleUnmatch(tx.id)}
@@ -959,6 +987,15 @@ function App() {
                     <span className={`receipt-badge ${r.match_status || 'unmatched'}`}>
                       {receiptMatchLabel(r.match_status)}
                     </span>
+                    {r.match_status === 'matched_unsure' && (
+                      <button
+                        className="receipt-confirm-btn-card"
+                        onClick={e => { e.stopPropagation(); handleConfirmMatch(r.id) }}
+                        title="Confirm match"
+                      >
+                        Confirm
+                      </button>
+                    )}
                     <span className="receipt-card-date">
                       {r.created_at ? formatUploadDate(r.created_at) : ''}
                     </span>
@@ -978,6 +1015,7 @@ function App() {
           onRetry={(id) => { handleReceiptRetry(id); setSelectedReceipt(null) }}
           onUnmatch={(id) => handleReceiptUnmatch(id)}
           onRematch={(id) => handleReceiptRematch(id)}
+          onConfirmMatch={(id) => handleConfirmMatch(id)}
           onUpdate={(id, field, value) => {
             const parsed = ['subtotal', 'tax_amount', 'total_amount'].includes(field) && value !== ''
               ? parseFloat(value) : value

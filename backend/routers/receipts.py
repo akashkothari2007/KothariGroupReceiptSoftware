@@ -236,6 +236,13 @@ def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
         query = f"UPDATE receipts SET {', '.join(set_parts)} WHERE id = :rid"
         conn.execute(text(query), params)
 
+        # Sync match_status to linked transaction (e.g. confirming unsure → sure)
+        if "match_status" in fields and not is_unmatched:
+            conn.execute(
+                text("UPDATE transactions SET match_status = :status WHERE matched_receipt_id = :rid"),
+                {"status": fields["match_status"], "rid": receipt_id},
+            )
+
     # Auto-rematch if user edited a matching-relevant field and receipt is unmatched
     edited_match_fields = set(fields.keys()) & MATCH_RELEVANT_FIELDS
     if edited_match_fields and is_unmatched and is_completed:
