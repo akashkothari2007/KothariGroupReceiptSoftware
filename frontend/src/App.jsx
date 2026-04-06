@@ -47,7 +47,7 @@ function ShimmerCards({ count = 6 }) {
   )
 }
 
-function ReceiptDetailModal({ receipt, onClose, onUpdate }) {
+function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry }) {
   const [fileUrl, setFileUrl] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
   const [fields, setFields] = useState({})
@@ -102,6 +102,14 @@ function ReceiptDetailModal({ receipt, onClose, onUpdate }) {
           <div className="modal-title-row">
             <h2 className="modal-title">{receipt.file_name || 'Receipt'}</h2>
             <ProcessingDot status={receipt.processing_status} />
+            {receipt.processing_status === 'failed' && onRetry && (
+              <button
+                style={{ marginLeft: 8, padding: '4px 12px', fontSize: 12, background: '#f0a500', color: '#000', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                onClick={() => onRetry(receipt.id)}
+              >
+                Retry
+              </button>
+            )}
           </div>
           <button className="modal-close" onClick={onClose}>&times;</button>
         </div>
@@ -513,6 +521,17 @@ function App() {
     }
   }
 
+  const handleReceiptRetry = async (receiptId) => {
+    setReceiptMenuOpen(null)
+    setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, processing_status: 'processing' } : r))
+    try {
+      const res = await fetch(`${API}/receipts/${receiptId}/retry`, { method: 'POST' })
+      if (!res.ok) throw new Error()
+    } catch {
+      setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, processing_status: 'failed' } : r))
+    }
+  }
+
   // ── Formatters ──
   const formatDate = (d) => {
     if (!d) return ''
@@ -844,6 +863,14 @@ function App() {
                     </div>
                     {receiptMenuOpen === r.id && (
                       <div className="receipt-menu" onClick={e => e.stopPropagation()}>
+                        {(r.processing_status === 'failed' || r.processing_status === 'completed') && (
+                          <button
+                            className="receipt-menu-item"
+                            onClick={() => handleReceiptRetry(r.id)}
+                          >
+                            Retry
+                          </button>
+                        )}
                         <button
                           className="receipt-menu-item receipt-menu-delete"
                           onClick={() => handleReceiptDelete(r.id)}
@@ -892,6 +919,7 @@ function App() {
         <ReceiptDetailModal
           receipt={selectedReceipt}
           onClose={() => setSelectedReceipt(null)}
+          onRetry={(id) => { handleReceiptRetry(id); setSelectedReceipt(null) }}
           onUpdate={(id, field, value) => {
             const parsed = ['subtotal', 'tax_amount', 'total_amount'].includes(field) && value !== ''
               ? parseFloat(value) : value

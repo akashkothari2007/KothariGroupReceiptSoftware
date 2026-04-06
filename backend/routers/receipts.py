@@ -230,6 +230,40 @@ def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
     return {"updated": True}
 
 
+@router.post("/{receipt_id}/retry")
+async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
+    """Re-process a failed receipt extraction."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT image_url, file_type, processing_status FROM receipts WHERE id = :id"),
+            {"id": receipt_id},
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    if row[2] not in ("failed", "completed"):
+        raise HTTPException(status_code=400, detail=f"Receipt is {row[2]}, not retryable")
+
+    # Reset extracted fields and status
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                UPDATE receipts
+                SET processing_status = 'pending',
+                    merchant_name = NULL, receipt_date = NULL, subtotal = NULL,
+                    tax_amount = NULL, tax_type = NULL, total_amount = NULL,
+                    country = NULL, raw_ai_response = NULL,
+                    transaction_id = NULL, match_status = 'unmatched'
+                WHERE id = :id
+            """),
+            {"id": receipt_id},
+        )
+
+    logger.info(f"Retrying extraction for receipt {receipt_id}")
+    background_tasks.add_task(_run_extraction_bg, receipt_id, row[0], row[1])
+    return {"retrying": True, "receipt_id": receipt_id}
+
+
 @router.get("/{receipt_id}/url")
 def get_receipt_url(receipt_id: str):
     """Return a short-lived signed URL for the receipt file (60 min)."""
