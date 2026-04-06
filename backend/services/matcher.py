@@ -2,11 +2,18 @@
 Receipt ↔ Transaction Matching Engine
 
 Scoring system:
-  - Amount exact match (CAD or foreign)     +50
-  - Amount within 5% (CAD or foreign)       +25
-  - Merchant keyword overlap                +30
-  - Date within 0 days                      +15
-  - Date within 1-3 days                    +10
+  Amount (country-aware):
+  - Correct currency match exact             +50
+  - Correct currency match within 5%         +25
+  - Cross-currency coincidental exact        +15  (downgraded — suspicious)
+  Other signals:
+  - Merchant keyword overlap                 +30
+  - Date within 0 days                       +15
+  - Date within 1-3 days                     +10
+
+Country logic:
+  - Receipt country != CA → "foreign" receipt → prefer foreign_amount
+  - Receipt country == CA or unknown → prefer amount_cad
 
 Thresholds:
   - score >= 65  →  matched_sure   (auto-match)
@@ -32,6 +39,7 @@ SCORE_UNSURE = 40
 # ── Scoring weights ──
 AMOUNT_EXACT = 50
 AMOUNT_CLOSE = 25
+AMOUNT_CROSS_CURRENCY = 15   # coincidental match in wrong currency
 MERCHANT_MATCH = 30
 DATE_SAME_DAY = 15
 DATE_NEAR = 10
@@ -80,28 +88,53 @@ def score_pair(tx: dict, receipt: dict) -> dict:
     tx_amount = tx.get("amount_cad")
     tx_foreign = tx.get("foreign_amount")
     r_total = receipt.get("total_amount")
+    r_country = (receipt.get("country") or "").strip().upper()
+    is_foreign_receipt = r_country != "" and r_country != "CA"
 
-    # ── Amount matching ──
+    # ── Amount matching (country-aware) ──
+    # Score both CAD and foreign matches, but weight by currency alignment.
+    # Foreign receipt → foreign_amount is "correct", CAD is "cross-currency"
+    # Canadian receipt → CAD is "correct", foreign is "cross-currency"
+    cad_score = 0
+    cad_label = None
+    foreign_score = 0
+    foreign_label = None
+
     if tx_amount is not None and r_total is not None:
         diff = abs(float(tx_amount) - float(r_total))
         if diff <= AMOUNT_EXACT_TOL:
-            score += AMOUNT_EXACT
-            breakdown.append(f"amount_exact_cad(diff={diff:.2f}) +{AMOUNT_EXACT}")
+            if is_foreign_receipt:
+                cad_score = AMOUNT_CROSS_CURRENCY
+                cad_label = f"amount_cad_cross_currency(diff={diff:.2f}) +{AMOUNT_CROSS_CURRENCY}"
+            else:
+                cad_score = AMOUNT_EXACT
+                cad_label = f"amount_exact_cad(diff={diff:.2f}) +{AMOUNT_EXACT}"
         elif float(tx_amount) != 0 and diff / abs(float(tx_amount)) <= AMOUNT_CLOSE_PCT:
-            score += AMOUNT_CLOSE
-            breakdown.append(f"amount_close_cad({diff:.2f}/{abs(float(tx_amount)):.2f}={diff/abs(float(tx_amount))*100:.1f}%) +{AMOUNT_CLOSE}")
+            if not is_foreign_receipt:
+                cad_score = AMOUNT_CLOSE
+                cad_label = f"amount_close_cad({diff:.2f}/{abs(float(tx_amount)):.2f}={diff/abs(float(tx_amount))*100:.1f}%) +{AMOUNT_CLOSE}"
 
-    # Also check foreign amount (receipt might be in foreign currency)
-    if tx_foreign is not None and r_total is not None and score < AMOUNT_EXACT:
+    if tx_foreign is not None and r_total is not None:
         diff_f = abs(float(tx_foreign) - float(r_total))
         if diff_f <= AMOUNT_EXACT_TOL:
-            score += AMOUNT_EXACT
-            breakdown.append(f"amount_exact_foreign(diff={diff_f:.2f}) +{AMOUNT_EXACT}")
+            if is_foreign_receipt:
+                foreign_score = AMOUNT_EXACT
+                foreign_label = f"amount_exact_foreign(diff={diff_f:.2f}) +{AMOUNT_EXACT}"
+            else:
+                foreign_score = AMOUNT_CROSS_CURRENCY
+                foreign_label = f"amount_foreign_cross_currency(diff={diff_f:.2f}) +{AMOUNT_CROSS_CURRENCY}"
         elif float(tx_foreign) != 0 and diff_f / abs(float(tx_foreign)) <= AMOUNT_CLOSE_PCT:
-            # Only add if we haven't already scored amount_close from CAD
-            if score < AMOUNT_CLOSE:
-                score += AMOUNT_CLOSE
-                breakdown.append(f"amount_close_foreign({diff_f:.2f}/{abs(float(tx_foreign)):.2f}={diff_f/abs(float(tx_foreign))*100:.1f}%) +{AMOUNT_CLOSE}")
+            if is_foreign_receipt:
+                foreign_score = AMOUNT_CLOSE
+                foreign_label = f"amount_close_foreign({diff_f:.2f}/{abs(float(tx_foreign)):.2f}={diff_f/abs(float(tx_foreign))*100:.1f}%) +{AMOUNT_CLOSE}"
+
+    # Take the best amount score
+    if foreign_score >= cad_score and foreign_score > 0:
+        score += foreign_score
+        breakdown.append(foreign_label)
+    elif cad_score > 0:
+        score += cad_score
+        breakdown.append(cad_label)
 
     # ── Merchant matching ──
     tx_keywords = _extract_keywords(tx.get("merchant", "") + " " + tx.get("description", ""))

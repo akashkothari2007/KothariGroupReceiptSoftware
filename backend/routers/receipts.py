@@ -100,7 +100,7 @@ def list_receipts():
                        r.merchant_name, r.receipt_date, r.tax_amount, r.tax_type,
                        r.total_amount, r.match_status, r.processing_status, r.created_at,
                        r.transaction_id, t.merchant as tx_merchant, t.amount_cad as tx_amount,
-                       t.transaction_date as tx_date
+                       t.transaction_date as tx_date, r.country
                 FROM receipts r
                 LEFT JOIN transactions t ON t.id = r.transaction_id
                 ORDER BY r.created_at DESC
@@ -127,6 +127,7 @@ def list_receipts():
             "tx_merchant": r[14],
             "tx_amount": float(r[15]) if r[15] is not None else None,
             "tx_date": str(r[16]) if r[16] else None,
+            "country": r[17],
         }
         for r in rows
     ]
