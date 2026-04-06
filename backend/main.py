@@ -1,11 +1,20 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from db import engine
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("app")
 from routers.uploads import router as uploads_router
 from routers.statements import router as statements_router
 from routers.transactions import router as transactions_router
 from routers.lookups import router as lookups_router
+from routers.receipts import router as receipts_router
 
 app = FastAPI(title="Kothari Group Expenses")
 
@@ -22,6 +31,7 @@ app.include_router(uploads_router)
 app.include_router(statements_router)
 app.include_router(transactions_router)
 app.include_router(lookups_router)
+app.include_router(receipts_router)
 
 
 @app.get("/health")

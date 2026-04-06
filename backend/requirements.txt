@@ -4,3 +4,8 @@ sqlalchemy
 psycopg2-binary
 python-dotenv
 python-multipart
+supabase
+httpx
+pymupdf
+pillow
+pillow-heif
