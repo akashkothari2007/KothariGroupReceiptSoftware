@@ -20,7 +20,7 @@ Country logic:
 Date limits:
   - >7 days apart: no date bonus
   - >14 days apart: -10 penalty
-  - >30 days apart: disqualified (score = 0)
+  - >21 days apart: disqualified (score = 0)
 
 Guards:
   - Receipt with null/zero total_amount: skip (no auto-match)
@@ -46,6 +46,7 @@ logger = logging.getLogger("matcher")
 # ── Thresholds ──
 SCORE_AUTO = 65
 SCORE_UNSURE = 40
+SCORE_MAX_NO_MERCHANT = 55  # cap when no merchant match — always unsure, never sure
 
 # ── Scoring weights ──
 AMOUNT_EXACT = 50
@@ -61,7 +62,7 @@ AMOUNT_EXACT_TOL = 0.02   # within 2 cents
 AMOUNT_CLOSE_PCT = 0.05   # within 5%
 
 # Date limits
-DATE_MAX_DAYS = 30           # beyond this, disqualify entirely
+DATE_MAX_DAYS = 21           # beyond this, disqualify entirely
 
 
 def _parse_date(d) -> Optional[date]:
@@ -147,16 +148,29 @@ def score_pair(tx: dict, receipt: dict) -> dict:
     # should be treated as a normal CAD match regardless of receipt country.
     # Only apply cross-currency penalty when the tx actually HAS a foreign amount
     # (proving it's a real foreign transaction).
+    tx_country = (tx.get("country") or "").strip().upper()
+    is_foreign_tx = tx_country != "" and tx_country != "CA"
     tx_has_foreign = tx_foreign is not None and float(tx_foreign) != 0
-    use_cross_currency = is_foreign_receipt and tx_has_foreign
+    # Apply cross-currency penalty when tx is truly foreign OR receipt is foreign
+    # and the tx actually has a foreign_amount proving it's a real foreign transaction
+    use_cross_currency = tx_has_foreign and (is_foreign_receipt or is_foreign_tx)
+
+    # Use absolute values for comparisons so refund txs (-$X) match refund receipts ($X)
+    abs_tx_amount = abs(float(tx_amount)) if tx_amount is not None else None
+    abs_r_total = abs(float(r_total)) if r_total is not None else None
+    abs_tx_foreign = abs(float(tx_foreign)) if tx_foreign is not None else None
+    sign_mismatch = (
+        tx_amount is not None and r_total is not None
+        and (float(tx_amount) < 0) != (float(r_total) < 0)
+    )
 
     cad_score = 0
     cad_label = None
     foreign_score = 0
     foreign_label = None
 
-    if tx_amount is not None and r_total is not None:
-        diff = abs(float(tx_amount) - float(r_total))
+    if abs_tx_amount is not None and abs_r_total is not None:
+        diff = abs(abs_tx_amount - abs_r_total)
         if diff <= AMOUNT_EXACT_TOL:
             if use_cross_currency:
                 cad_score = AMOUNT_CROSS_CURRENCY
@@ -164,13 +178,13 @@ def score_pair(tx: dict, receipt: dict) -> dict:
             else:
                 cad_score = AMOUNT_EXACT
                 cad_label = f"amount_exact_cad(diff={diff:.2f}) +{AMOUNT_EXACT}"
-        elif float(tx_amount) != 0 and diff / abs(float(tx_amount)) <= AMOUNT_CLOSE_PCT:
+        elif abs_tx_amount != 0 and diff / abs_tx_amount <= AMOUNT_CLOSE_PCT:
             if not use_cross_currency:
                 cad_score = AMOUNT_CLOSE
-                cad_label = f"amount_close_cad({diff:.2f}/{abs(float(tx_amount)):.2f}={diff/abs(float(tx_amount))*100:.1f}%) +{AMOUNT_CLOSE}"
+                cad_label = f"amount_close_cad({diff:.2f}/{abs_tx_amount:.2f}={diff/abs_tx_amount*100:.1f}%) +{AMOUNT_CLOSE}"
 
-    if tx_foreign is not None and r_total is not None:
-        diff_f = abs(float(tx_foreign) - float(r_total))
+    if abs_tx_foreign is not None and abs_r_total is not None:
+        diff_f = abs(abs_tx_foreign - abs_r_total)
         if diff_f <= AMOUNT_EXACT_TOL:
             if is_foreign_receipt:
                 foreign_score = AMOUNT_EXACT
@@ -178,10 +192,10 @@ def score_pair(tx: dict, receipt: dict) -> dict:
             else:
                 foreign_score = AMOUNT_CROSS_CURRENCY
                 foreign_label = f"amount_foreign_cross_currency(diff={diff_f:.2f}) +{AMOUNT_CROSS_CURRENCY}"
-        elif float(tx_foreign) != 0 and diff_f / abs(float(tx_foreign)) <= AMOUNT_CLOSE_PCT:
+        elif abs_tx_foreign != 0 and diff_f / abs_tx_foreign <= AMOUNT_CLOSE_PCT:
             if is_foreign_receipt:
                 foreign_score = AMOUNT_CLOSE
-                foreign_label = f"amount_close_foreign({diff_f:.2f}/{abs(float(tx_foreign)):.2f}={diff_f/abs(float(tx_foreign))*100:.1f}%) +{AMOUNT_CLOSE}"
+                foreign_label = f"amount_close_foreign({diff_f:.2f}/{abs_tx_foreign:.2f}={diff_f/abs_tx_foreign*100:.1f}%) +{AMOUNT_CLOSE}"
 
     # Take the best amount score
     amount_pts = 0
@@ -193,6 +207,9 @@ def score_pair(tx: dict, receipt: dict) -> dict:
         amount_pts = cad_score
         score += cad_score
         breakdown.append(cad_label)
+
+    if sign_mismatch and amount_pts > 0:
+        breakdown.append("sign_mismatch(tx/receipt signs differ)")
 
     # ── Merchant matching ──
     tx_keywords = _extract_keywords(tx.get("merchant", "") + " " + tx.get("description", ""))
@@ -216,7 +233,7 @@ def score_pair(tx: dict, receipt: dict) -> dict:
     if tx_date and r_date:
         days_diff = abs((tx_date - r_date).days)
 
-        # Hard cutoff: >30 days = disqualify entirely
+        # Hard cutoff: beyond DATE_MAX_DAYS = disqualify entirely
         if days_diff > DATE_MAX_DAYS:
             return {"score": 0, "breakdown": [f"disqualified: {days_diff} days apart (>{DATE_MAX_DAYS}d limit)"]}
 
@@ -229,6 +246,11 @@ def score_pair(tx: dict, receipt: dict) -> dict:
         elif days_diff > 14:
             score += DATE_FAR_PENALTY
             breakdown.append(f"date_far({days_diff}d) {DATE_FAR_PENALTY}")
+
+    # Cap: without merchant confirmation, never auto-match (always unsure)
+    if merchant_pts == 0 and score > SCORE_MAX_NO_MERCHANT:
+        score = SCORE_MAX_NO_MERCHANT
+        breakdown.append(f"no_merchant_cap({SCORE_MAX_NO_MERCHANT})")
 
     return {"score": max(score, 0), "breakdown": breakdown}
 

@@ -15,12 +15,16 @@ run_matching_for_receipt(receipt_id)
 """
 
 import logging
+import threading
 from sqlalchemy import text
 from db import engine
 from services.matcher import run_matching
 from services.match_writer import apply_match, remove_match
 
 logger = logging.getLogger("match_run")
+
+# Prevents two concurrent receipt extractions from competing for the same transaction
+_matching_lock = threading.Lock()
 
 
 def _tx_row_to_dict(r) -> dict:
@@ -34,6 +38,7 @@ def _tx_row_to_dict(r) -> dict:
         "foreign_currency": r[6],
         "match_status": r[7],
         "matched_receipt_id": str(r[8]) if r[8] else None,
+        "country": r[9] if len(r) > 9 else None,
     }
 
 
@@ -53,7 +58,7 @@ def _receipt_row_to_dict(r) -> dict:
 
 _TX_COLS = """id, transaction_date, merchant, description,
               amount_cad, foreign_amount, foreign_currency,
-              match_status, matched_receipt_id"""
+              match_status, matched_receipt_id, country"""
 
 _RECEIPT_COLS = """id, merchant_name, receipt_date, total_amount,
                    tax_amount, tax_type, country, match_status,
@@ -65,34 +70,35 @@ def run_matching_for_statement(statement_id: str) -> list:
     Also re-evaluates unsure-matched receipts in case a better match exists."""
     logger.info(f"Running matching for statement {statement_id}")
 
-    with engine.connect() as conn:
-        # Unmatched transactions from this statement
-        tx_rows = conn.execute(
-            text(f"""
-                SELECT {_TX_COLS} FROM transactions
-                WHERE statement_id = :sid AND matched_receipt_id IS NULL
-            """),
-            {"sid": statement_id},
-        ).fetchall()
-        transactions = [_tx_row_to_dict(r) for r in tx_rows]
+    with _matching_lock:
+        with engine.connect() as conn:
+            # Unmatched transactions from this statement
+            tx_rows = conn.execute(
+                text(f"""
+                    SELECT {_TX_COLS} FROM transactions
+                    WHERE statement_id = :sid AND matched_receipt_id IS NULL
+                """),
+                {"sid": statement_id},
+            ).fetchall()
+            transactions = [_tx_row_to_dict(r) for r in tx_rows]
 
-        # Unmatched receipts + unsure-matched receipts (eligible for upgrade)
-        r_rows = conn.execute(
-            text(f"""
-                SELECT {_RECEIPT_COLS} FROM receipts
-                WHERE processing_status = 'completed'
-                  AND (transaction_id IS NULL OR match_status = 'matched_unsure')
-            """)
-        ).fetchall()
-        receipts = [_receipt_row_to_dict(r) for r in r_rows]
+            # Unmatched receipts + unsure-matched receipts (eligible for upgrade)
+            r_rows = conn.execute(
+                text(f"""
+                    SELECT {_RECEIPT_COLS} FROM receipts
+                    WHERE processing_status = 'completed'
+                      AND (transaction_id IS NULL OR match_status = 'matched_unsure')
+                """)
+            ).fetchall()
+            receipts = [_receipt_row_to_dict(r) for r in r_rows]
 
-    logger.info(f"Found {len(transactions)} unmatched tx, {len(receipts)} candidate receipts (incl unsure)")
+        logger.info(f"Found {len(transactions)} unmatched tx, {len(receipts)} candidate receipts (incl unsure)")
 
-    matches = run_matching(transactions, receipts)
-    applied = _apply_matches(matches, receipts)
+        matches = run_matching(transactions, receipts)
+        applied = _apply_matches(matches, receipts)
 
-    logger.info(f"Statement {statement_id}: {applied} matches applied/upgraded")
-    return matches
+        logger.info(f"Statement {statement_id}: {applied} matches applied/upgraded")
+        return matches
 
 
 def run_matching_for_receipt(receipt_id: str) -> list:
@@ -100,42 +106,58 @@ def run_matching_for_receipt(receipt_id: str) -> list:
     Also considers unsure-matched transactions that might be a better fit."""
     logger.info(f"Running matching for receipt {receipt_id}")
 
-    with engine.connect() as conn:
-        row = conn.execute(
-            text(f"""
-                SELECT {_RECEIPT_COLS} FROM receipts
-                WHERE id = :rid AND processing_status = 'completed'
-            """),
-            {"rid": receipt_id},
-        ).fetchone()
+    with _matching_lock:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(f"""
+                    SELECT {_RECEIPT_COLS} FROM receipts
+                    WHERE id = :rid AND processing_status = 'completed'
+                """),
+                {"rid": receipt_id},
+            ).fetchone()
 
-        if not row:
-            logger.info(f"Receipt {receipt_id} not found or not completed, skipping")
-            return []
+            if not row:
+                logger.info(f"Receipt {receipt_id} not found or not completed, skipping")
+                return []
 
-        receipt = _receipt_row_to_dict(row)
+            receipt = _receipt_row_to_dict(row)
 
-        if receipt["transaction_id"] and receipt["match_status"] != "matched_unsure":
-            logger.info(f"Receipt {receipt_id} already matched (sure), skipping")
-            return []
+            if receipt["transaction_id"] and receipt["match_status"] != "matched_unsure":
+                logger.info(f"Receipt {receipt_id} already matched (sure), skipping")
+                return []
 
-        # Unmatched tx + unsure-matched tx (eligible for upgrade)
-        tx_rows = conn.execute(
-            text(f"""
-                SELECT {_TX_COLS} FROM transactions
-                WHERE matched_receipt_id IS NULL
-                   OR match_status = 'matched_unsure'
-            """)
-        ).fetchall()
-        transactions = [_tx_row_to_dict(r) for r in tx_rows]
+            # Unmatched tx + unsure-matched tx (eligible for upgrade)
+            # Pre-filter to ±14 days of receipt date to reduce false positives
+            date_filter = ""
+            params = {}
+            if receipt.get("receipt_date"):
+                date_filter = """
+                    AND transaction_date >= :date_lo
+                    AND transaction_date <= :date_hi
+                """
+                from datetime import date, timedelta
+                rd = date.fromisoformat(receipt["receipt_date"][:10])
+                params["date_lo"] = (rd - timedelta(days=14)).isoformat()
+                params["date_hi"] = (rd + timedelta(days=14)).isoformat()
 
-    logger.info(f"Matching receipt against {len(transactions)} candidate tx (incl unsure)")
+            tx_rows = conn.execute(
+                text(f"""
+                    SELECT {_TX_COLS} FROM transactions
+                    WHERE (matched_receipt_id IS NULL
+                       OR match_status = 'matched_unsure')
+                    {date_filter}
+                """),
+                params,
+            ).fetchall()
+            transactions = [_tx_row_to_dict(r) for r in tx_rows]
 
-    matches = run_matching(transactions, [receipt])
-    applied = _apply_matches(matches, [receipt])
+        logger.info(f"Matching receipt against {len(transactions)} candidate tx (incl unsure)")
 
-    logger.info(f"Receipt {receipt_id}: {applied} matches applied/upgraded")
-    return matches
+        matches = run_matching(transactions, [receipt])
+        applied = _apply_matches(matches, [receipt])
+
+        logger.info(f"Receipt {receipt_id}: {applied} matches applied/upgraded")
+        return matches
 
 
 def _apply_matches(matches: list, receipts_pool: list) -> int:

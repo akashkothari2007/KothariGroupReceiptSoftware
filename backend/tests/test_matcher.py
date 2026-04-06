@@ -11,7 +11,7 @@ try:
     import pytest
 except ImportError:
     pytest = None
-from services.matcher import score_pair, run_matching, _extract_keywords, _parse_date, SCORE_AUTO
+from services.matcher import score_pair, run_matching, _extract_keywords, _parse_date, SCORE_AUTO, SCORE_MAX_NO_MERCHANT
 from datetime import date
 
 
@@ -23,6 +23,7 @@ def make_tx(**overrides):
         "merchant": "LYFT   *RIDE WED 7AM", "description": "VANCOUVER",
         "amount_cad": 25.50, "foreign_amount": None, "foreign_currency": None,
         "match_status": "unmatched", "matched_receipt_id": None,
+        "country": "CA",
     }
     base.update(overrides)
     return base
@@ -97,14 +98,15 @@ class TestCountryAwareScoring:
 
     def test_foreign_receipt_cad_no_foreign_amount(self):
         """US receipt + CAD tx with NO foreign_amount = skip cross-currency penalty.
-        AI country detection is unreliable; trust the transaction data."""
+        AI country detection is unreliable; trust the transaction data.
+        But no merchant match → capped at 55."""
         tx = make_tx(amount_cad=300.00, merchant="RANDOM STORE", description="TORONTO",
                      transaction_date="2026-03-13")
         r = make_receipt(merchant_name="Something Else", total_amount=300.00,
                          country="US", receipt_date="2026-03-13")
         result = score_pair(tx, r)
-        # No foreign_amount on tx → skip cross-currency → full CAD exact(50) + date(15) = 65
-        assert result["score"] == 65
+        # No foreign_amount on tx → skip cross-currency → CAD exact(50) + date(15) = 65 → no_merchant_cap(55)
+        assert result["score"] == 55
 
     def test_foreign_receipt_cad_WITH_foreign_amount(self):
         """US receipt + CAD match but tx HAS foreign_amount = cross-currency (15)."""
@@ -206,8 +208,8 @@ class TestScoring:
         r = make_receipt(total_amount=100.00, merchant_name="BBB",
                          receipt_date="2026-03-15", country="CA")
         result = score_pair(tx, r)
-        # exact cad(50) + date near 2d(10) = 60
-        assert result["score"] == 60
+        # exact cad(50) + date near 2d(10) = 60 → no_merchant_cap(55)
+        assert result["score"] == 55
 
     def test_amex_garbled_merchant(self):
         tx = make_tx(merchant="UBER   *EATS  PENDING", description="VANCOUVER BC",
@@ -304,8 +306,8 @@ class TestCompoundKeywords:
 # ── Date limits ──
 
 class TestDateLimits:
-    def test_over_30_days_disqualified(self):
-        """Matches >30 days apart should score 0."""
+    def test_over_21_days_disqualified(self):
+        """Matches >21 days apart should score 0."""
         tx = make_tx(amount_cad=44.10, merchant="UBER", transaction_date="2026-03-22")
         r = make_receipt(total_amount=44.10, merchant_name="Uber",
                          receipt_date="2026-04-25", country="CA")
@@ -383,6 +385,116 @@ class TestGraysCafe:
         # No foreign_amount → skip cross-currency → exact CAD(50) + merchant(30) + date(15) = 95
         assert result["score"] == 95
         assert result["score"] >= SCORE_AUTO
+
+
+# ── Merchant cap (Fix 4) ──
+
+class TestMerchantCap:
+    def test_amount_only_capped_below_auto(self):
+        """Amount-only match (no merchant) should never reach auto threshold."""
+        tx = make_tx(amount_cad=500.00, merchant="PHY DISABLED PERSONS", description="TORONTO",
+                     transaction_date="2026-03-13")
+        r = make_receipt(merchant_name="Gift Emporium", total_amount=500.00,
+                         country="CA", receipt_date="2026-03-13")
+        result = score_pair(tx, r)
+        # exact CAD(50) + same_day(15) = 65 → no_merchant_cap(55)
+        assert result["score"] == SCORE_MAX_NO_MERCHANT
+        assert result["score"] < SCORE_AUTO
+
+    def test_merchant_match_not_capped(self):
+        """With merchant match, score is NOT capped."""
+        tx = make_tx(amount_cad=500.00, merchant="AIR CANADA", description="WINNIPEG",
+                     transaction_date="2026-03-13")
+        r = make_receipt(merchant_name="Air Canada", total_amount=500.00,
+                         country="CA", receipt_date="2026-03-13")
+        result = score_pair(tx, r)
+        # exact CAD(50) + merchant(30) + same_day(15) = 95
+        assert result["score"] == 95
+
+    def test_amount_only_no_date_not_capped(self):
+        """Amount-only with score ≤ 55 should not get capped (already below)."""
+        tx = make_tx(amount_cad=100.00, merchant="RANDOM")
+        r = make_receipt(merchant_name="Different", total_amount=100.00,
+                         receipt_date="2026-03-20", country="CA")
+        result = score_pair(tx, r)
+        # exact CAD(50) + 7 days(0) = 50, below cap
+        assert result["score"] == 50
+
+
+# ── Absolute value / refund matching (Fix 6) ──
+
+class TestAbsValueMatching:
+    def test_negative_tx_positive_receipt(self):
+        """Negative tx amount should match positive receipt (refund)."""
+        tx = make_tx(amount_cad=-299.51, merchant="WESTJET", transaction_date="2026-03-13")
+        r = make_receipt(merchant_name="WestJet", total_amount=299.51,
+                         country="CA", receipt_date="2026-03-13")
+        result = score_pair(tx, r)
+        assert result["score"] == 95
+        assert any("sign_mismatch" in b for b in result["breakdown"])
+
+    def test_positive_tx_negative_receipt(self):
+        """Positive tx + negative receipt (AI-negated refund) still matches."""
+        tx = make_tx(amount_cad=150.00, merchant="STORE XYZ", transaction_date="2026-03-13")
+        r = make_receipt(merchant_name="Store XYZ", total_amount=-150.00,
+                         country="CA", receipt_date="2026-03-13")
+        result = score_pair(tx, r)
+        assert result["score"] == 95
+        assert any("sign_mismatch" in b for b in result["breakdown"])
+
+    def test_both_negative_no_sign_mismatch(self):
+        """Both negative (refund tx + refund receipt) — no sign mismatch note."""
+        tx = make_tx(amount_cad=-50.00)
+        r = make_receipt(total_amount=-50.00)
+        result = score_pair(tx, r)
+        assert result["score"] == 95
+        assert not any("sign_mismatch" in b for b in result["breakdown"])
+
+
+# ── Transaction country check (Fix 3) ──
+
+class TestTxCountryCheck:
+    def test_foreign_tx_cad_match_penalized(self):
+        """Foreign tx (country=AR) with foreign_amount — CAD coincidence should be penalized."""
+        tx = make_tx(amount_cad=20.23, foreign_amount=20.26, foreign_currency="ARS",
+                     merchant="UBER", description="BUENOS AIRES",
+                     transaction_date="2026-03-13", country="AR")
+        r = make_receipt(merchant_name="Uber", total_amount=20.26,
+                         country="CA", receipt_date="2026-03-13")
+        result = score_pair(tx, r)
+        # Receipt is CA, tx is foreign with foreign_amount → use_cross_currency applies
+        # foreign_amount cross-currency(15) + merchant(30) + date(15) = 60
+        assert result["score"] == 60
+
+    def test_domestic_tx_no_penalty(self):
+        """Canadian tx with no foreign amount — full CAD match."""
+        tx = make_tx(amount_cad=20.26, merchant="UBER", description="VANCOUVER",
+                     transaction_date="2026-03-13", country="CA")
+        r = make_receipt(merchant_name="Uber", total_amount=20.26,
+                         country="CA", receipt_date="2026-03-13")
+        result = score_pair(tx, r)
+        assert result["score"] == 95
+
+
+# ── Tighter date window (Fix 7) ──
+
+class TestTighterDateWindow:
+    def test_22_days_disqualified(self):
+        """22 days apart (> 21) should now be disqualified."""
+        tx = make_tx(amount_cad=100.00, merchant="STORE", transaction_date="2026-03-01")
+        r = make_receipt(total_amount=100.00, merchant_name="Store",
+                         receipt_date="2026-03-23", country="CA")
+        result = score_pair(tx, r)
+        assert result["score"] == 0
+
+    def test_21_days_still_valid(self):
+        """21 days apart should still be valid (with far penalty)."""
+        tx = make_tx(amount_cad=100.00, merchant="STORE", transaction_date="2026-03-01")
+        r = make_receipt(total_amount=100.00, merchant_name="Store",
+                         receipt_date="2026-03-22", country="CA")
+        result = score_pair(tx, r)
+        # exact CAD(50) + merchant(30) + date_far(-10) = 70
+        assert result["score"] == 70
 
 
 # ── Run directly ──

@@ -118,6 +118,17 @@ async def extract_receipt_data(receipt_id: str, storage_path: str, file_type: st
             if val is not None and val != "null" and val != "":
                 fields[db_key] = val
 
+        # Negate total_amount for refunds so it matches negative tx amounts
+        is_refund = result.get("is_refund")
+        if is_refund is True and fields.get("total_amount") is not None:
+            try:
+                amt = float(fields["total_amount"])
+                if amt > 0:
+                    fields["total_amount"] = -amt
+                    logger.info(f"[{receipt_id}] Refund detected — negated total to {-amt}")
+            except (ValueError, TypeError):
+                pass
+
         updated = update_receipt(receipt_id, fields)
         if updated:
             logger.info(f"[{receipt_id}] Receipt updated successfully")

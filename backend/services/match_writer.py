@@ -34,6 +34,33 @@ def apply_match(transaction_id: str, receipt_id: str, match_status: str, match_m
     logger.info(f"Applying match: tx={transaction_id} ↔ receipt={receipt_id} status={match_status} method={match_method}")
 
     with engine.begin() as conn:
+        # ── Bidirectional cleanup: clear any stale matches first ──
+        # If this tx already has a different receipt, clear that receipt's link
+        old_receipt = conn.execute(
+            text("SELECT matched_receipt_id FROM transactions WHERE id = :tid"),
+            {"tid": transaction_id},
+        ).fetchone()
+        if old_receipt and old_receipt[0] and str(old_receipt[0]) != receipt_id:
+            old_rid = str(old_receipt[0])
+            logger.info(f"  Clearing stale receipt {old_rid} from tx={transaction_id}")
+            conn.execute(
+                text("UPDATE receipts SET transaction_id = NULL, match_status = 'unmatched' WHERE id = :rid"),
+                {"rid": old_rid},
+            )
+
+        # If this receipt already has a different tx, clear that tx's link
+        old_tx = conn.execute(
+            text("SELECT transaction_id FROM receipts WHERE id = :rid"),
+            {"rid": receipt_id},
+        ).fetchone()
+        if old_tx and old_tx[0] and str(old_tx[0]) != transaction_id:
+            old_tid = str(old_tx[0])
+            logger.info(f"  Clearing stale tx {old_tid} from receipt={receipt_id}")
+            conn.execute(
+                text("UPDATE transactions SET matched_receipt_id = NULL, match_status = 'unmatched', tax_amount = NULL WHERE id = :tid"),
+                {"tid": old_tid},
+            )
+
         # Fetch receipt details for tax logic
         r = conn.execute(
             text("SELECT tax_amount, tax_type, country FROM receipts WHERE id = :id"),
