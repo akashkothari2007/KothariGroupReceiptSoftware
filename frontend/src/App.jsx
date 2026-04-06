@@ -3,6 +3,17 @@ import './App.css'
 
 const API = 'http://localhost:8000'
 
+// Cache signed URLs for 50 min (they expire at 60)
+const urlCache = {}
+async function getReceiptUrl(receiptId) {
+  const cached = urlCache[receiptId]
+  if (cached && Date.now() - cached.ts < 50 * 60 * 1000) return cached.url
+  const res = await fetch(`${API}/receipts/${receiptId}/url`)
+  const data = await res.json()
+  urlCache[receiptId] = { url: data.url, ts: Date.now() }
+  return data.url
+}
+
 function useDebounce() {
   const timers = useRef({})
   return (key, fn, delay = 500) => {
@@ -55,9 +66,8 @@ function ReceiptDetailModal({ receipt, onClose, onUpdate }) {
     })
     setLoadingUrl(true)
     setFileUrl(null)
-    fetch(`${API}/receipts/${receipt.id}/url`)
-      .then(r => r.json())
-      .then(data => setFileUrl(data.url))
+    getReceiptUrl(receipt.id)
+      .then(url => setFileUrl(url))
       .catch(() => setFileUrl(null))
       .finally(() => setLoadingUrl(false))
   }, [receipt])
@@ -440,9 +450,7 @@ function App() {
     setReceiptPreviewUrl(null)
     setReceiptPreviewLoading(true)
     try {
-      const res = await fetch(`${API}/receipts/${receiptId}/url`)
-      const data = await res.json()
-      setReceiptPreviewUrl(data.url)
+      setReceiptPreviewUrl(await getReceiptUrl(receiptId))
     } catch { setReceiptPreviewUrl(null) }
     setReceiptPreviewLoading(false)
   }
