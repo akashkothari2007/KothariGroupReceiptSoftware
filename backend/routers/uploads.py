@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+import threading
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File
 from sqlalchemy import text
@@ -10,6 +11,10 @@ from services.match_run import run_matching_for_statement
 logger = logging.getLogger("uploads")
 
 router = APIRouter(prefix="/upload", tags=["uploads"])
+
+# In-memory tracking of background matching status per statement
+# Values: "matching", "done", or "error"
+matching_status: dict[str, str] = {}
 
 
 def parse_date(date_str: str):
@@ -150,18 +155,25 @@ async def upload_statement(file: UploadFile = File(...)):
                 params,
             )
 
-    # Run auto-matching against existing receipts
-    try:
-        matches = run_matching_for_statement(str(statement_id))
-        logger.info(f"Statement {statement_id}: auto-matched {len(matches)} transactions")
-    except Exception as e:
-        logger.error(f"Auto-matching failed for statement {statement_id}: {e}", exc_info=True)
-        matches = []
+    # Run auto-matching in background thread so the upload response is instant
+    sid = str(statement_id)
+    matching_status[sid] = "matching"
+
+    def _bg_match():
+        try:
+            matches = run_matching_for_statement(sid)
+            logger.info(f"Statement {sid}: auto-matched {len(matches)} transactions")
+            matching_status[sid] = "done"
+        except Exception as e:
+            logger.error(f"Auto-matching failed for statement {sid}: {e}", exc_info=True)
+            matching_status[sid] = "error"
+
+    threading.Thread(target=_bg_match, daemon=True).start()
 
     return {
-        "statement_id": str(statement_id),
+        "statement_id": sid,
         "inserted": len(valid_rows),
         "skipped": skipped,
         "total_rows": len(rows),
-        "auto_matched": len(matches),
+        "matching_status": "matching",
     }

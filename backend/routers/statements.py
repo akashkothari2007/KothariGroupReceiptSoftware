@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 from db import engine
+from routers.uploads import matching_status
 
 router = APIRouter(prefix="/statements", tags=["statements"])
 
@@ -26,6 +27,7 @@ def list_statements():
             "uploaded_at": r[2].isoformat() if r[2] else None,
             "transaction_count": r[3],
             "total_amount": float(r[4]),
+            "matching_status": matching_status.get(str(r[0])),
         }
         for r in rows
     ]
@@ -73,6 +75,7 @@ def get_transactions(statement_id: str):
 
 @router.delete("/{statement_id}")
 def delete_statement(statement_id: str):
+    matching_status.pop(statement_id, None)
     with engine.begin() as conn:
         conn.execute(
             text("DELETE FROM statements WHERE id = :sid"),

@@ -336,7 +336,7 @@ function App() {
     try {
       const res = await fetch(`${API}/upload/statement`, { method: 'POST', body: form })
       const data = await res.json()
-      const updated = await fetchStatements()
+      await fetchStatements()
       setCurrentId(data.statement_id)
     } catch (err) {
       alert('Upload failed: ' + err.message)
@@ -344,6 +344,26 @@ function App() {
     setUploading(false)
     fileRef.current.value = ''
   }
+
+  // Poll for background matching completion on statements
+  useEffect(() => {
+    const isMatching = statements.some(s => s.matching_status === 'matching')
+    if (!isMatching) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/statements`)
+        const data = await res.json()
+        setStatements(data)
+        // If matching just finished for current statement, refresh transactions
+        const prev = statements.find(s => s.id === currentId)
+        const curr = data.find(s => s.id === currentId)
+        if (prev?.matching_status === 'matching' && curr?.matching_status !== 'matching' && currentId) {
+          fetchTransactions(currentId, true)
+        }
+      } catch {}
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [statements, currentId, fetchTransactions])
 
   const handleDelete = async () => {
     if (!currentStatement) return
@@ -568,6 +588,7 @@ function App() {
                     <span className="statement-name">{currentStatement.filename}</span>
                     <span className="statement-meta">
                       {currentStatement.transaction_count} transactions &middot; {formatMoney(currentStatement.total_amount)} &middot; {formatUploadDate(currentStatement.uploaded_at)}
+                      {currentStatement.matching_status === 'matching' && <span style={{color: '#f0a500', marginLeft: 8}}>Matching...</span>}
                     </span>
                     <span className="statement-counter">
                       {currentIndex + 1} of {statements.length}
