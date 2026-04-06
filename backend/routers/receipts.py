@@ -96,11 +96,14 @@ def list_receipts():
     with engine.connect() as conn:
         result = conn.execute(
             text("""
-                SELECT id, image_url, file_name, file_type, source,
-                       merchant_name, receipt_date, tax_amount, tax_type,
-                       total_amount, match_status, processing_status, created_at
-                FROM receipts
-                ORDER BY created_at DESC
+                SELECT r.id, r.image_url, r.file_name, r.file_type, r.source,
+                       r.merchant_name, r.receipt_date, r.tax_amount, r.tax_type,
+                       r.total_amount, r.match_status, r.processing_status, r.created_at,
+                       r.transaction_id, t.merchant as tx_merchant, t.amount_cad as tx_amount,
+                       t.transaction_date as tx_date
+                FROM receipts r
+                LEFT JOIN transactions t ON t.id = r.transaction_id
+                ORDER BY r.created_at DESC
             """)
         )
         rows = result.fetchall()
@@ -120,6 +123,10 @@ def list_receipts():
             "match_status": r[10],
             "processing_status": r[11],
             "created_at": str(r[12]),
+            "transaction_id": str(r[13]) if r[13] else None,
+            "tx_merchant": r[14],
+            "tx_amount": float(r[15]) if r[15] is not None else None,
+            "tx_date": str(r[16]) if r[16] else None,
         }
         for r in rows
     ]

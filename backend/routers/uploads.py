@@ -1,9 +1,13 @@
 import csv
 import io
+import logging
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File
 from sqlalchemy import text
 from db import engine
+from services.match_run import run_matching_for_statement
+
+logger = logging.getLogger("uploads")
 
 router = APIRouter(prefix="/upload", tags=["uploads"])
 
@@ -136,9 +140,18 @@ async def upload_statement(file: UploadFile = File(...)):
                 params,
             )
 
+    # Run auto-matching against existing receipts
+    try:
+        matches = run_matching_for_statement(str(statement_id))
+        logger.info(f"Statement {statement_id}: auto-matched {len(matches)} transactions")
+    except Exception as e:
+        logger.error(f"Auto-matching failed for statement {statement_id}: {e}", exc_info=True)
+        matches = []
+
     return {
         "statement_id": str(statement_id),
         "inserted": len(valid_rows),
         "skipped": skipped,
         "total_rows": len(rows),
+        "auto_matched": len(matches),
     }

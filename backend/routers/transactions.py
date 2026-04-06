@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import text
 from db import engine
+from services.match_writer import apply_match, remove_match
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -50,3 +51,23 @@ def update_transaction(transaction_id: str, updates: TransactionUpdate):
         conn.execute(text(query), params)
 
     return {"updated": True}
+
+
+class ManualMatch(BaseModel):
+    receipt_id: str
+
+
+@router.post("/{transaction_id}/match")
+def match_transaction(transaction_id: str, body: ManualMatch):
+    ok = apply_match(transaction_id, body.receipt_id, "matched_sure", "manual")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return {"matched": True}
+
+
+@router.delete("/{transaction_id}/match")
+def unmatch_transaction(transaction_id: str):
+    ok = remove_match(transaction_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="No match to remove")
+    return {"unmatched": True}

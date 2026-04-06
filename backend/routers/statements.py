@@ -40,8 +40,11 @@ def get_transactions(statement_id: str):
                        t.amount_cad, t.foreign_amount, t.foreign_currency,
                        t.tax_amount,
                        t.company_id, t.gl_code_id,
-                       t.match_status
+                       t.match_status, t.matched_receipt_id,
+                       r.file_name as receipt_file_name,
+                       r.merchant_name as receipt_merchant
                 FROM transactions t
+                LEFT JOIN receipts r ON r.id = t.matched_receipt_id
                 WHERE t.statement_id = :sid
                 ORDER BY t.transaction_date DESC, t.merchant
             """),
@@ -60,6 +63,9 @@ def get_transactions(statement_id: str):
             "company_id": str(r[8]) if r[8] else None,
             "gl_code_id": str(r[9]) if r[9] else None,
             "match_status": r[10],
+            "matched_receipt_id": str(r[11]) if r[11] else None,
+            "receipt_file_name": r[12],
+            "receipt_merchant": r[13],
         }
         for r in rows
     ]

@@ -159,6 +159,15 @@ function ReceiptDetailModal({ receipt, onClose, onUpdate }) {
               <span className="meta-label">Uploaded</span>
               <span className="meta-value">{receipt.created_at ? new Date(receipt.created_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
             </div>
+            {receipt.transaction_id && (
+              <div className="meta-row meta-row-linked">
+                <span className="meta-label">Linked transaction</span>
+                <span className="meta-value meta-value-linked">
+                  {receipt.tx_merchant || 'Transaction'} — {receipt.tx_amount != null ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(receipt.tx_amount) : ''}
+                  {receipt.tx_date ? ` (${receipt.tx_date})` : ''}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -206,6 +215,11 @@ function App() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
   const [selectedReceipt, setSelectedReceipt] = useState(null)
   const [receiptMenuOpen, setReceiptMenuOpen] = useState(null)
+  const [receiptSort, setReceiptSort] = useState('date') // 'date' | 'matched' | 'unmatched'
+  const [linkingTxId, setLinkingTxId] = useState(null) // tx id with open receipt picker
+  const [receiptPreviewTxId, setReceiptPreviewTxId] = useState(null) // tx id showing receipt popup
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState(null)
+  const [receiptPreviewLoading, setReceiptPreviewLoading] = useState(false)
   const receiptFileRef = useRef()
 
   const currentIndex = statements.findIndex(s => s.id === currentId)
@@ -220,13 +234,12 @@ function App() {
     return data
   }, [])
 
-  const fetchTransactions = useCallback(async (statementId) => {
-    setLoadingTx(true)
-    setTransactions([])
+  const fetchTransactions = useCallback(async (statementId, silent = false) => {
+    if (!silent) { setLoadingTx(true); setTransactions([]) }
     const res = await fetch(`${API}/statements/${statementId}/transactions`)
     const data = await res.json()
     setTransactions(data)
-    setLoadingTx(false)
+    if (!silent) setLoadingTx(false)
   }, [])
 
   useEffect(() => {
@@ -260,10 +273,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (activeTab === 'receipts' && !receiptsFetched) {
-      fetchReceipts()
-    }
-  }, [activeTab, receiptsFetched, fetchReceipts])
+    if (!receiptsFetched) fetchReceipts()
+  }, [receiptsFetched, fetchReceipts])
 
   // Poll for status updates when any receipts are still processing
   useEffect(() => {
@@ -285,13 +296,13 @@ function App() {
     return () => clearInterval(interval)
   }, [receipts, activeTab])
 
-  // Close receipt menu on outside click
+  // Close receipt menu / link dropdown on outside click
   useEffect(() => {
-    if (receiptMenuOpen === null) return
-    const handler = () => setReceiptMenuOpen(null)
+    if (receiptMenuOpen === null && linkingTxId === null) return
+    const handler = () => { setReceiptMenuOpen(null); setLinkingTxId(null) }
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)
-  }, [receiptMenuOpen])
+  }, [receiptMenuOpen, linkingTxId])
 
   // ── Statements handlers ──
   const goOlder = () => {
@@ -371,6 +382,69 @@ function App() {
     } else {
       debounce(`${txId}-${field}`, save)
     }
+  }
+
+  // ── Match handlers ──
+  const handleManualMatch = async (txId, receiptId) => {
+    setLinkingTxId(null)
+    const receipt = receipts.find(r => r.id === receiptId)
+    // Optimistic update
+    setTransactions(prev => prev.map(t => t.id === txId ? {
+      ...t, matched_receipt_id: receiptId, match_status: 'matched_sure',
+      receipt_file_name: receipt?.file_name, receipt_merchant: receipt?.merchant_name,
+    } : t))
+    setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, match_status: 'matched_sure' } : r))
+    try {
+      const res = await fetch(`${API}/transactions/${txId}/match`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receipt_id: receiptId }),
+      })
+      if (!res.ok) throw new Error()
+      // Silently refresh to get updated tax_amount from server
+      if (currentId) fetchTransactions(currentId, true)
+    } catch {
+      // Revert
+      setTransactions(prev => prev.map(t => t.id === txId ? {
+        ...t, matched_receipt_id: null, match_status: 'unmatched',
+        receipt_file_name: null, receipt_merchant: null,
+      } : t))
+      setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, match_status: 'unmatched' } : r))
+    }
+  }
+
+  const handleUnmatch = async (txId) => {
+    const tx = transactions.find(t => t.id === txId)
+    const oldReceiptId = tx?.matched_receipt_id
+    // Optimistic update
+    setTransactions(prev => prev.map(t => t.id === txId ? {
+      ...t, matched_receipt_id: null, match_status: 'unmatched', tax_amount: null,
+      receipt_file_name: null, receipt_merchant: null,
+    } : t))
+    if (oldReceiptId) {
+      setReceipts(prev => prev.map(r => r.id === oldReceiptId ? { ...r, match_status: 'unmatched' } : r))
+    }
+    setReceiptPreviewTxId(null)
+    try {
+      const res = await fetch(`${API}/transactions/${txId}/match`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+    } catch {
+      // Revert — just refetch
+      if (currentId) fetchTransactions(currentId)
+      fetchReceipts()
+    }
+  }
+
+  const showReceiptPreview = async (txId, receiptId) => {
+    if (receiptPreviewTxId === txId) { setReceiptPreviewTxId(null); return }
+    setReceiptPreviewTxId(txId)
+    setReceiptPreviewUrl(null)
+    setReceiptPreviewLoading(true)
+    try {
+      const res = await fetch(`${API}/receipts/${receiptId}/url`)
+      const data = await res.json()
+      setReceiptPreviewUrl(data.url)
+    } catch { setReceiptPreviewUrl(null) }
+    setReceiptPreviewLoading(false)
   }
 
   // ── Receipts handlers ──
@@ -592,10 +666,65 @@ function App() {
                             ))}
                           </select>
                         </td>
-                        <td>
-                          <span className={`receipt-badge ${tx.match_status || 'unmatched'}`}>
-                            {statusLabel(tx.match_status)}
-                          </span>
+                        <td className="receipt-cell">
+                          {tx.matched_receipt_id ? (
+                            <div className="receipt-matched">
+                              <span
+                                className={`receipt-badge ${tx.match_status || 'matched_sure'} receipt-badge-clickable`}
+                                onClick={() => showReceiptPreview(tx.id, tx.matched_receipt_id)}
+                                title="Click to preview receipt"
+                              >
+                                {tx.receipt_merchant || tx.receipt_file_name || 'Matched'}
+                              </span>
+                              <button
+                                className="receipt-unmatch-btn"
+                                onClick={() => handleUnmatch(tx.id)}
+                                title="Remove match"
+                              >&times;</button>
+                              {receiptPreviewTxId === tx.id && (
+                                <div className="receipt-popup" onClick={e => e.stopPropagation()}>
+                                  <div className="receipt-popup-header">
+                                    <span className="receipt-popup-title">{tx.receipt_merchant || tx.receipt_file_name}</span>
+                                    <button className="modal-close" onClick={() => setReceiptPreviewTxId(null)}>&times;</button>
+                                  </div>
+                                  {receiptPreviewLoading ? (
+                                    <div className="shimmer-block" style={{ width: '100%', height: 200, borderRadius: 8 }} />
+                                  ) : receiptPreviewUrl ? (
+                                    <img src={receiptPreviewUrl} alt="receipt" className="receipt-popup-img" />
+                                  ) : (
+                                    <div className="receipt-preview-placeholder" style={{ padding: 20 }}>No preview</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="receipt-link-wrapper">
+                              <button
+                                className="receipt-link-btn"
+                                onClick={e => { e.stopPropagation(); setLinkingTxId(linkingTxId === tx.id ? null : tx.id) }}
+                              >
+                                Link
+                              </button>
+                              {linkingTxId === tx.id && (
+                                <div className="receipt-link-dropdown" onClick={e => e.stopPropagation()}>
+                                  {receipts.filter(r => !r.match_status || r.match_status === 'unmatched').length === 0 ? (
+                                    <div className="receipt-link-empty">No unmatched receipts</div>
+                                  ) : (
+                                    receipts.filter(r => !r.match_status || r.match_status === 'unmatched').map(r => (
+                                      <button
+                                        key={r.id}
+                                        className="receipt-link-option"
+                                        onClick={() => handleManualMatch(tx.id, r.id)}
+                                      >
+                                        <span className="receipt-link-name">{r.merchant_name || r.file_name || 'Untitled'}</span>
+                                        <span className="receipt-link-amount">{r.total_amount != null ? formatMoney(r.total_amount) : ''}</span>
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -632,6 +761,15 @@ function App() {
             <span className="receipts-count">
               {!loadingReceipts && `${receipts.length} receipt${receipts.length !== 1 ? 's' : ''}`}
             </span>
+            <select
+              className="receipt-sort-select"
+              value={receiptSort}
+              onChange={e => setReceiptSort(e.target.value)}
+            >
+              <option value="date">Newest first</option>
+              <option value="unmatched">Unmatched first</option>
+              <option value="matched">Matched first</option>
+            </select>
           </div>
 
           {loadingReceipts ? (
@@ -640,7 +778,18 @@ function App() {
             <div className="empty">No receipts yet. Upload one to get started.</div>
           ) : (
             <div className="receipts-grid">
-              {receipts.map(r => (
+              {[...receipts].sort((a, b) => {
+                if (receiptSort === 'matched') {
+                  const aM = (a.match_status === 'matched_sure' || a.match_status === 'matched_unsure') ? 0 : 1
+                  const bM = (b.match_status === 'matched_sure' || b.match_status === 'matched_unsure') ? 0 : 1
+                  if (aM !== bM) return aM - bM
+                } else if (receiptSort === 'unmatched') {
+                  const aM = (!a.match_status || a.match_status === 'unmatched') ? 0 : 1
+                  const bM = (!b.match_status || b.match_status === 'unmatched') ? 0 : 1
+                  if (aM !== bM) return aM - bM
+                }
+                return new Date(b.created_at) - new Date(a.created_at)
+              }).map(r => (
                 <div
                   key={r.id}
                   className="receipt-card"

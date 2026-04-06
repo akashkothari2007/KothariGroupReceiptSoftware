@@ -721,3 +721,191 @@ tr:hover td { background: #f9fafb; }
   cursor: pointer;
   appearance: auto;
 }
+
+/* ── Receipt Cell (transaction table) ── */
+.receipt-cell {
+  position: relative;
+  min-width: 140px;
+}
+
+.receipt-matched {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.receipt-badge-clickable {
+  cursor: pointer;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.receipt-badge-clickable:hover {
+  filter: brightness(0.95);
+}
+
+.receipt-unmatch-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  font-size: 16px;
+  color: #d1d5db;
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.receipt-unmatch-btn:hover {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+/* ── Receipt Preview Popup ── */
+.receipt-popup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 50;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  width: 300px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.receipt-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.receipt-popup-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.receipt-popup-img {
+  width: 100%;
+  display: block;
+  max-height: 400px;
+  object-fit: contain;
+}
+
+/* ── Link Receipt Button & Dropdown ── */
+.receipt-link-wrapper {
+  position: relative;
+}
+
+.receipt-link-btn {
+  padding: 3px 10px;
+  border: 1px dashed #d1d5db;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  background: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.receipt-link-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: #eff6ff;
+}
+
+.receipt-link-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 50;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  width: 280px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.receipt-link-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.receipt-link-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.receipt-link-option:hover {
+  background: #f9fafb;
+}
+
+.receipt-link-name {
+  color: #111827;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.receipt-link-amount {
+  color: #6b7280;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ── Receipt Sort Select ── */
+.receipt-sort-select {
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #374151;
+  background: #fff;
+  cursor: pointer;
+}
+
+/* ── Linked Transaction in Receipt Modal ── */
+.meta-row-linked {
+  background: #f0fdf4;
+  margin: 0 -24px;
+  padding: 10px 24px;
+  border-bottom: none;
+}
+
+.meta-value-linked {
+  color: #15803d;
+  font-size: 12px;
+}

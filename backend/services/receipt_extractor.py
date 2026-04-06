@@ -9,6 +9,7 @@ from sqlalchemy import text
 from db import engine
 from services.ai import call_azure_vision
 from services.prompts import RECEIPT_EXTRACTION_PROMPT
+from services.match_run import run_matching_for_receipt
 
 logger = logging.getLogger("receipt_extractor")
 
@@ -115,6 +116,12 @@ async def extract_receipt_data(receipt_id: str, storage_path: str, file_type: st
         updated = update_receipt(receipt_id, fields)
         if updated:
             logger.info(f"[{receipt_id}] Receipt updated successfully")
+            # Try auto-matching now that extraction is done
+            try:
+                matches = run_matching_for_receipt(receipt_id)
+                logger.info(f"[{receipt_id}] Auto-matching found {len(matches)} match(es)")
+            except Exception as me:
+                logger.error(f"[{receipt_id}] Auto-matching failed: {me}", exc_info=True)
         else:
             logger.warning(f"[{receipt_id}] Receipt was deleted before update")
 
