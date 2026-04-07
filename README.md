@@ -88,11 +88,25 @@ AZURE_VISION_API_URL="https://..."
 AZURE_VISION_API_KEY=...
 ```
 
+And a `.env` in `frontend/` with:
+```
+VITE_SUPABASE_URL=https://xxx.supabase.co
+VITE_SUPABASE_ANON_KEY=...
+```
+
+## Auth
+
+Microsoft SSO via Supabase + Azure AD. Tenant-restricted — only `@kotharigroup.com` accounts can sign in.
+
+- Frontend: Supabase OAuth flow (`azure` provider), session managed via `onAuthStateChange`, JWT attached to all API calls
+- Backend: FastAPI dependency verifies JWT using ES256 public key from Supabase JWKS endpoint
+- All API routes protected except `/health`
+
 ## What's not built yet
 
-- Auth (single user for now, no login)
 - Vendor mappings (auto-assign company + GL code based on merchant)
-- Per-company expense reports (CSV/PDF export)
+- Expense report generation — per-company PDF reports with transactions + receipts, showing who created and who approved with timestamps
+- Expense report approval workflow — one or two approvers required before finalizing
 - Receipt image compression (for storage savings at scale)
 - Pagination on receipts list
 - Multi-card support (currently Amex only)
