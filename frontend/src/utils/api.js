@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 
-export const API = 'http://localhost:8000'
+export const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 /**
  * Wrapper around fetch that attaches the Supabase JWT as a Bearer token.
