@@ -9,3 +9,4 @@ httpx
 pymupdf
 pillow
 pillow-heif
+python-jose[cryptography]

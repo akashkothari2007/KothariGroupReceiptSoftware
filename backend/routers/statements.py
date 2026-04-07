@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from db import engine
+from middleware.auth import get_current_user
 from routers.uploads import matching_status
 
-router = APIRouter(prefix="/statements", tags=["statements"])
+router = APIRouter(prefix="/statements", tags=["statements"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("")

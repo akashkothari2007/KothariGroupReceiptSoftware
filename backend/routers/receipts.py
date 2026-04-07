@@ -5,17 +5,18 @@ import asyncio
 import logging
 import threading
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import text
 from supabase import create_client
 from db import engine
+from middleware.auth import get_current_user
 from services.receipt_extractor import extract_receipt_data
 from services.match_run import run_matching_for_receipt
 from services.match_writer import remove_match
 
 logger = logging.getLogger("receipts")
-router = APIRouter(prefix="/receipts", tags=["receipts"])
+router = APIRouter(prefix="/receipts", tags=["receipts"], dependencies=[Depends(get_current_user)])
 
 ALLOWED_TYPES = {"image/jpeg", "image/png", "application/pdf", "image/heic", "image/heif"}
 BUCKET = "receipts"

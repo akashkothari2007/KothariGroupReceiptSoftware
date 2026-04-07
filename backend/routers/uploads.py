@@ -3,14 +3,15 @@ import io
 import logging
 import threading
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy import text
 from db import engine
+from middleware.auth import get_current_user
 from services.match_run import run_matching_for_statement
 
 logger = logging.getLogger("uploads")
 
-router = APIRouter(prefix="/upload", tags=["uploads"])
+router = APIRouter(prefix="/upload", tags=["uploads"], dependencies=[Depends(get_current_user)])
 
 # In-memory tracking of background matching status per statement
 # Values: "matching", "done", or "error"

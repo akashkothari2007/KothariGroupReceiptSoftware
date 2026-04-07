@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from db import engine
+from middleware.auth import get_current_user
 
-router = APIRouter(prefix="/lookups", tags=["lookups"])
+router = APIRouter(prefix="/lookups", tags=["lookups"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/gl-codes")
