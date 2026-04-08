@@ -47,12 +47,13 @@ async def graph_webhook(request: Request):
             continue
 
         resource = notification.get("resource", "")
-        parts = resource.split("/messages/")
-        if len(parts) < 2:
+        resource_lower = resource.lower()
+        idx = resource_lower.find("/messages/")
+        if idx < 0:
             logger.warning(f"Unexpected resource format: {resource}")
             continue
 
-        message_id = parts[1]
+        message_id = resource[idx + len("/messages/"):]
         logger.info(f"Notification for message: {message_id}")
 
         threading.Thread(
