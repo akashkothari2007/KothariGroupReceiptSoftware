@@ -32,7 +32,7 @@ function App() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
   const [selectedReceipt, setSelectedReceipt] = useState(null)
   const [receiptMenuOpen, setReceiptMenuOpen] = useState(null)
-  const [receiptSort, setReceiptSort] = useState('date') // 'date' | 'matched' | 'unmatched'
+  const [receiptFilter, setReceiptFilter] = useState({ unmatched: true, unsure: true, matched: false })
   const [linkingTxId, setLinkingTxId] = useState(null) // tx id with open receipt picker
   const [receiptPreviewTxId, setReceiptPreviewTxId] = useState(null) // tx id showing receipt popup
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState(null)
@@ -434,8 +434,8 @@ function App() {
           receipts={receipts}
           loadingReceipts={loadingReceipts}
           uploadingReceipt={uploadingReceipt}
-          receiptSort={receiptSort}
-          setReceiptSort={setReceiptSort}
+          receiptFilter={receiptFilter}
+          setReceiptFilter={setReceiptFilter}
           receiptMenuOpen={receiptMenuOpen}
           setReceiptMenuOpen={setReceiptMenuOpen}
           handleReceiptUpload={handleReceiptUpload}

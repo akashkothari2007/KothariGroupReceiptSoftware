@@ -974,16 +974,40 @@ tr:hover td { background: #f9fafb; }
   flex-shrink: 0;
 }
 
-/* ── Receipt Sort Select ── */
-.receipt-sort-select {
-  padding: 6px 10px;
+/* ── Receipt Filter Toggles ── */
+.receipt-filter-toggles {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.filter-chip {
+  padding: 5px 12px;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
   font-family: inherit;
-  color: #374151;
+  color: #9ca3af;
   background: #fff;
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-chip:hover {
+  border-color: #d1d5db;
+  color: #6b7280;
+}
+
+.filter-chip.active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.filter-chip.active:hover {
+  background: #374151;
+  border-color: #374151;
 }
 
 /* ── Linked Transaction in Receipt Modal ── */

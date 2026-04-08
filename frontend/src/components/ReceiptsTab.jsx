@@ -1,13 +1,27 @@
-import { useRef } from 'react'
+import { useMemo } from 'react'
 import { ShimmerCards } from './ShimmerCards'
 import { ReceiptCard } from './ReceiptCard'
 
+function statusBucket(match_status) {
+  if (match_status === 'matched_sure') return 'matched'
+  if (match_status === 'matched_unsure') return 'unsure'
+  return 'unmatched'
+}
+
 export function ReceiptsTab({
-  receipts, loadingReceipts, uploadingReceipt, receiptSort, setReceiptSort,
+  receipts, loadingReceipts, uploadingReceipt, receiptFilter, setReceiptFilter,
   receiptMenuOpen, setReceiptMenuOpen,
   handleReceiptUpload, handleReceiptDelete, handleReceiptRetry, handleConfirmMatch,
   setSelectedReceipt, receiptFileRef,
 }) {
+  const toggle = (key) => setReceiptFilter(prev => ({ ...prev, [key]: !prev[key] }))
+
+  const filtered = useMemo(() => {
+    const list = receipts.filter(r => receiptFilter[statusBucket(r.match_status)])
+    list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    return list
+  }, [receipts, receiptFilter])
+
   return (
     <div className="receipts-tab">
       <div className="receipts-toolbar">
@@ -26,37 +40,22 @@ export function ReceiptsTab({
           {uploadingReceipt ? 'Uploading...' : '+ Upload Receipt'}
         </button>
         <span className="receipts-count">
-          {!loadingReceipts && `${receipts.length} receipt${receipts.length !== 1 ? 's' : ''}`}
+          {!loadingReceipts && `${filtered.length} of ${receipts.length} receipt${receipts.length !== 1 ? 's' : ''}`}
         </span>
-        <select
-          className="receipt-sort-select"
-          value={receiptSort}
-          onChange={e => setReceiptSort(e.target.value)}
-        >
-          <option value="date">Newest first</option>
-          <option value="unmatched">Unmatched first</option>
-          <option value="matched">Matched first</option>
-        </select>
+        <div className="receipt-filter-toggles">
+          <button className={`filter-chip${receiptFilter.unmatched ? ' active' : ''}`} onClick={() => toggle('unmatched')}>Unmatched</button>
+          <button className={`filter-chip${receiptFilter.unsure ? ' active' : ''}`} onClick={() => toggle('unsure')}>Unsure</button>
+          <button className={`filter-chip${receiptFilter.matched ? ' active' : ''}`} onClick={() => toggle('matched')}>Matched</button>
+        </div>
       </div>
 
       {loadingReceipts ? (
         <ShimmerCards />
-      ) : receipts.length === 0 ? (
-        <div className="empty">No receipts yet. Upload one to get started.</div>
+      ) : filtered.length === 0 ? (
+        <div className="empty">{receipts.length === 0 ? 'No receipts yet. Upload one to get started.' : 'No receipts match the current filter.'}</div>
       ) : (
         <div className="receipts-grid">
-          {[...receipts].sort((a, b) => {
-            if (receiptSort === 'matched') {
-              const aM = (a.match_status === 'matched_sure' || a.match_status === 'matched_unsure') ? 0 : 1
-              const bM = (b.match_status === 'matched_sure' || b.match_status === 'matched_unsure') ? 0 : 1
-              if (aM !== bM) return aM - bM
-            } else if (receiptSort === 'unmatched') {
-              const aM = (!a.match_status || a.match_status === 'unmatched') ? 0 : 1
-              const bM = (!b.match_status || b.match_status === 'unmatched') ? 0 : 1
-              if (aM !== bM) return aM - bM
-            }
-            return new Date(b.created_at) - new Date(a.created_at)
-          }).map(r => (
+          {filtered.map(r => (
             <ReceiptCard
               key={r.id}
               receipt={r}
