@@ -86,3 +86,55 @@ async def call_azure_vision(image_bytes, prompt: str, mime_type: str = "image/pn
 
     logger.error(f"All {MAX_RETRIES} attempts failed")
     raise last_error
+
+
+async def call_azure_text(prompt: str) -> dict:
+    """
+    Text-only call to Azure OpenAI (no images). Cheaper than vision.
+    Returns parsed JSON. Retries up to 3 times.
+    """
+    payload = {
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 1000,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": AZURE_VISION_API_KEY,
+    }
+
+    logger.info(f"Azure text call — {len(prompt)} chars, url={AZURE_VISION_API_URL}")
+
+    last_error = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            logger.info(f"Text attempt {attempt + 1}/{MAX_RETRIES}")
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.post(
+                    AZURE_VISION_API_URL,
+                    json=payload,
+                    headers=headers,
+                )
+                response.raise_for_status()
+
+                data = response.json()
+                content = data["choices"][0]["message"]["content"]
+                logger.info(f"Raw AI text response: {content[:500]}")
+
+                content = content.strip()
+                if content.startswith("```"):
+                    content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+                    if content.endswith("```"):
+                        content = content[:-3]
+                    content = content.strip()
+
+                parsed = json.loads(content)
+                logger.info(f"Parsed AI text response: {parsed}")
+                return parsed
+
+        except Exception as e:
+            logger.error(f"Text attempt {attempt + 1} failed: {e}")
+            last_error = e
+            continue
+
+    logger.error(f"All {MAX_RETRIES} text attempts failed")
+    raise last_error

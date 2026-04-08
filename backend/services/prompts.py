@@ -50,6 +50,38 @@ COUNTRY RULES:
 """
 
 
+EMAIL_BODY_RECEIPT_PROMPT = """You are a receipt extraction assistant. Below is the text content of an email (may include forwarded messages).
+
+If this email contains a receipt, invoice, order confirmation, or purchase summary, extract the data.
+If this is NOT a receipt (e.g. newsletter, notification, conversation, marketing), return exactly: {"is_receipt": false}
+
+If it IS a receipt, return ONLY valid JSON:
+{
+  "is_receipt": true,
+  "merchant_name": "Store/business name",
+  "receipt_date": "YYYY-MM-DD or null",
+  "subtotal": 0.00,
+  "tax_amount": 0.00,
+  "tax_type": "HST or GST or GST+PST or none",
+  "total_amount": 0.00,
+  "country": "CA or US (2-letter code)",
+  "is_refund": false,
+  "receipt_text": "Only the receipt-relevant portion of the email (order summary, line items, totals). Keep it short and clean."
+}
+
+Rules:
+- All dollar amounts as numbers (no $ sign), null if not found
+- receipt_date: the purchase/billing date, NOT travel/service dates. YYYY-MM-DD or null.
+- total_amount: positive even for refunds. Use is_refund field instead.
+- tax_type: "HST" for Ontario 13%, "GST" for 5%, "GST+PST" for BC, "none" for foreign/no tax
+- country: default "CA". Only use other codes if clearly foreign (USD stated, US address, etc.)
+- receipt_text: extract ONLY the receipt/order portion. Strip email headers, signatures, disclaimers, forwarding headers, marketing footers. Keep merchant name, items, amounts, dates, totals.
+- Return ONLY the JSON object, no markdown, no explanation
+
+EMAIL TEXT:
+"""
+
+
 EMAIL_TRIAGE_PROMPT = """You are an email attachment classifier. You will see one or more images from an email's attachments and inline images.
 
 Your job: decide which image(s) are actual receipts, invoices, or purchase confirmations.

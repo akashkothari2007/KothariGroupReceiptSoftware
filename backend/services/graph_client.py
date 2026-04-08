@@ -112,6 +112,21 @@ def fetch_message(message_id: str) -> dict:
     return resp.json()
 
 
+def fetch_message_body(message_id: str) -> str:
+    """Fetch the HTML body content of a message."""
+    with httpx.Client(timeout=30) as client:
+        resp = client.get(
+            f"{GRAPH_BASE}/users/{MAILBOX}/messages/{message_id}",
+            params={"$select": "body"},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+    body = resp.json().get("body", {})
+    content = body.get("content", "")
+    logger.info(f"Fetched message body for {message_id}: {len(content)} chars, type={body.get('contentType')}")
+    return content
+
+
 def fetch_attachments(message_id: str) -> list[dict]:
     """
     Fetch all attachments for a message.

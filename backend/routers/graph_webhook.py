@@ -13,8 +13,10 @@ from services.graph_client import (
     delete_subscription,
     fetch_message,
     fetch_attachments,
+    fetch_message_body,
 )
 from services.email_triage import pick_receipt_candidates
+from services.email_body_extractor import extract_receipt_from_body
 from services.receipt_ingest import ingest_receipt_bytes
 
 logger = logging.getLogger("graph_webhook")
@@ -74,7 +76,7 @@ def _process_email_sync(message_id: str):
 
 
 async def _process_email(message_id: str):
-    """Fetch email, triage attachments, ingest receipts."""
+    """Fetch email, triage attachments, ingest receipts. Falls back to body extraction."""
 
     with engine.connect() as conn:
         exists = conn.execute(
@@ -97,34 +99,71 @@ async def _process_email(message_id: str):
         _mark_processed(message_id)
         return
 
+    attachment_receipts_found = 0
+
     attachments = fetch_attachments(message_id)
-    if not attachments:
-        logger.info(f"No attachments in message {message_id}, skipping")
-        _mark_processed(message_id)
-        return
+    if attachments:
+        candidates = await pick_receipt_candidates(attachments)
+        for candidate in candidates:
+            try:
+                result = ingest_receipt_bytes(
+                    file_bytes=candidate["content_bytes"],
+                    filename=candidate["name"],
+                    content_type=candidate["content_type"],
+                    source="email",
+                    email_message_id=message_id,
+                    email_sender=sender,
+                    email_received_at=received_at,
+                )
+                attachment_receipts_found += 1
+                logger.info(f"Ingested receipt {result['id']} from email attachment")
+            except Exception as e:
+                logger.error(f"Failed to ingest attachment '{candidate['name']}' from {message_id}: {e}", exc_info=True)
 
-    candidates = await pick_receipt_candidates(attachments)
-    if not candidates:
-        logger.info(f"No receipt candidates found in message {message_id}")
-        _mark_processed(message_id)
-        return
-
-    for candidate in candidates:
-        try:
-            result = ingest_receipt_bytes(
-                file_bytes=candidate["content_bytes"],
-                filename=candidate["name"],
-                content_type=candidate["content_type"],
-                source="email",
-                email_message_id=message_id,
-                email_sender=sender,
-                email_received_at=received_at,
-            )
-            logger.info(f"Ingested receipt {result['id']} from email {message_id}")
-        except Exception as e:
-            logger.error(f"Failed to ingest attachment '{candidate['name']}' from {message_id}: {e}", exc_info=True)
+    if attachment_receipts_found == 0:
+        logger.info(f"No attachment receipts found, trying email body extraction for {message_id}")
+        await _try_body_extraction(message_id, sender, received_at, subject)
 
     _mark_processed(message_id)
+
+
+async def _try_body_extraction(
+    message_id: str, sender: str, received_at: str, subject: str
+):
+    """Fetch the HTML body, run AI triage+extraction, save as .txt receipt if found."""
+    try:
+        html_body = fetch_message_body(message_id)
+    except Exception as e:
+        logger.error(f"Failed to fetch body for {message_id}: {e}", exc_info=True)
+        return
+
+    extracted = await extract_receipt_from_body(html_body)
+    if not extracted:
+        logger.info(f"No receipt found in email body for {message_id}")
+        return
+
+    receipt_text = extracted.get("receipt_text", "")
+    if not receipt_text:
+        receipt_text = f"Receipt from {extracted.get('merchant_name', 'unknown')} — ${extracted.get('total_amount', '?')}"
+
+    safe_subject = subject[:60].replace("/", "_").replace("\\", "_").strip() or "email_receipt"
+    filename = f"{safe_subject}.txt"
+    file_bytes = receipt_text.encode("utf-8")
+
+    try:
+        result = ingest_receipt_bytes(
+            file_bytes=file_bytes,
+            filename=filename,
+            content_type="text/plain",
+            source="email",
+            email_message_id=message_id,
+            email_sender=sender,
+            email_received_at=received_at,
+            extracted_fields=extracted,
+        )
+        logger.info(f"Ingested body receipt {result['id']} from email {message_id}")
+    except Exception as e:
+        logger.error(f"Failed to ingest body receipt from {message_id}: {e}", exc_info=True)
 
 
 def _mark_processed(message_id: str):
