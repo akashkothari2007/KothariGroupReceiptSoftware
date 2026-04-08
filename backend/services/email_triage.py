@@ -86,8 +86,8 @@ async def pick_receipt_candidates(candidates: list[dict]) -> list[dict]:
                 selected.append(image_candidates[original_idx])
 
         logger.info(f"AI triage: {len(selected)}/{len(image_candidates)} candidates selected as receipts")
-        return selected if selected else _heuristic_filter(image_candidates)
+        return selected
 
     except Exception as e:
-        logger.error(f"AI triage failed, using heuristic: {e}", exc_info=True)
+        logger.error(f"AI triage failed, using heuristic fallback: {e}", exc_info=True)
         return _heuristic_filter(image_candidates)
