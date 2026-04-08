@@ -134,16 +134,8 @@ def _mark_processed(message_id: str):
         )
 
 
-@router.post("/subscription/ensure")
-def ensure_subscription(request: Request):
-    """
-    Create or renew the Graph mail subscription.
-    Protected by webhook secret header.
-    """
-    auth = request.headers.get("X-Webhook-Secret", "")
-    if auth != WEBHOOK_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
-
+def ensure_subscription_internal() -> dict:
+    """Core logic: create or renew the Graph mail subscription. Used by both HTTP endpoint and scheduler."""
     notification_url = BACKEND_URL.rstrip("/") + "/graph/webhook"
 
     with engine.connect() as conn:
@@ -184,13 +176,22 @@ def ensure_subscription(request: Request):
                 pass
             _update_subscription_state(row[0], sub_id, None, "expired")
 
+    result = create_subscription(notification_url, WEBHOOK_SECRET)
+    _insert_subscription_state(result["subscription_id"], result["expiration_at"])
+    return {"action": "created", "subscription_id": result["subscription_id"]}
+
+
+@router.post("/subscription/ensure")
+def ensure_subscription(request: Request):
+    """HTTP endpoint wrapper — protected by webhook secret header."""
+    auth = request.headers.get("X-Webhook-Secret", "")
+    if auth != WEBHOOK_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        result = create_subscription(notification_url, WEBHOOK_SECRET)
-        _insert_subscription_state(result["subscription_id"], result["expiration_at"])
-        return {"action": "created", "subscription_id": result["subscription_id"]}
+        return ensure_subscription_internal()
     except Exception as e:
-        logger.error(f"Subscription creation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create subscription: {str(e)}")
+        logger.error(f"Subscription ensure failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed: {str(e)}")
 
 
 def _insert_subscription_state(subscription_id: str, expiration_at: str):
