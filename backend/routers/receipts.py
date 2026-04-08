@@ -8,7 +8,7 @@ from sqlalchemy import text
 from supabase import create_client
 from db import engine
 from middleware.auth import get_current_user
-from services.receipt_ingest import ingest_receipt_bytes
+from services.receipt_ingest import ingest_receipt_bytes, _run_extraction_bg
 from services.match_run import run_matching_for_receipt
 from services.match_writer import remove_match
 

@@ -3,6 +3,7 @@ import os
 import re
 import asyncio
 import logging
+import threading
 from typing import Optional
 from sqlalchemy import text
 from supabase import create_client
@@ -74,7 +75,6 @@ def ingest_receipt_bytes(
     receipt_id = str(row[0])
     logger.info(f"Receipt created: {receipt_id} — {filename} ({content_type}) source={source}")
 
-    import threading
     threading.Thread(
         target=_run_extraction_bg,
         args=(receipt_id, storage_filename, content_type),

@@ -1,30 +1,12 @@
 import io
-import base64
 import logging
 from PIL import Image
 from services.ai import call_azure_vision
+from services.prompts import EMAIL_TRIAGE_PROMPT
 
 logger = logging.getLogger("email_triage")
 
 RECEIPT_MIME_TYPES = {"image/jpeg", "image/png", "application/pdf", "image/heic", "image/heif"}
-
-TRIAGE_PROMPT = """You are an email attachment classifier. You will see one or more images from an email's attachments and inline images.
-
-Your job: decide which image(s) are actual receipts, invoices, or purchase confirmations.
-
-Ignore: company logos, email signatures, banners, marketing images, social media icons, tracking pixels, app store badges.
-
-Return ONLY valid JSON — an array of objects:
-[
-  {"index": 0, "is_receipt": true, "reason": "hotel invoice with total"},
-  {"index": 1, "is_receipt": false, "reason": "company logo"}
-]
-
-Rules:
-- index matches the order of images provided (0-based)
-- Be strict: only mark as receipt if it clearly shows a purchase amount or itemized charges
-- Return ONLY the JSON array, no markdown, no explanation
-"""
 
 
 def _make_thumbnail(image_bytes: bytes, content_type: str, max_size: int = 512) -> bytes:
@@ -90,7 +72,7 @@ async def pick_receipt_candidates(candidates: list[dict]) -> list[dict]:
 
     try:
         all_thumb_bytes = [t for _, t in valid_thumbs]
-        result = await call_azure_vision(all_thumb_bytes, TRIAGE_PROMPT, "image/png")
+        result = await call_azure_vision(all_thumb_bytes, EMAIL_TRIAGE_PROMPT, "image/png")
 
         if not isinstance(result, list):
             logger.warning(f"Triage AI returned non-list: {result}")

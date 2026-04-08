@@ -48,3 +48,22 @@ COUNTRY RULES:
 
 - Return ONLY the JSON object, no markdown, no explanation
 """
+
+
+EMAIL_TRIAGE_PROMPT = """You are an email attachment classifier. You will see one or more images from an email's attachments and inline images.
+
+Your job: decide which image(s) are actual receipts, invoices, or purchase confirmations.
+
+Ignore: company logos, email signatures, banners, marketing images, social media icons, tracking pixels, app store badges.
+
+Return ONLY valid JSON — an array of objects:
+[
+  {"index": 0, "is_receipt": true, "reason": "hotel invoice with total"},
+  {"index": 1, "is_receipt": false, "reason": "company logo"}
+]
+
+Rules:
+- index matches the order of images provided (0-based)
+- Be strict: only mark as receipt if it clearly shows a purchase amount or itemized charges
+- Return ONLY the JSON array, no markdown, no explanation
+"""

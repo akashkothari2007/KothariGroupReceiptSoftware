@@ -23,6 +23,7 @@ router = APIRouter(prefix="/graph", tags=["graph"])
 
 WEBHOOK_SECRET = os.getenv("GRAPH_WEBHOOK_SECRET", "")
 BACKEND_URL = os.getenv("BACKEND_URL", "")
+ALLOWED_SENDER_DOMAIN = os.getenv("GRAPH_ALLOWED_SENDER_DOMAIN", "kotharigroup.com")
 
 
 @router.post("/webhook")
@@ -46,7 +47,6 @@ async def graph_webhook(request: Request):
             continue
 
         resource = notification.get("resource", "")
-        # resource looks like: users/receipts@.../messages/AAMk...
         parts = resource.split("/messages/")
         if len(parts) < 2:
             logger.warning(f"Unexpected resource format: {resource}")
@@ -89,6 +89,12 @@ async def _process_email(message_id: str):
     received_at = msg.get("receivedDateTime")
     subject = msg.get("subject", "(no subject)")
     logger.info(f"Processing email: '{subject}' from {sender}")
+
+    sender_domain = sender.split("@")[-1].lower() if "@" in sender else ""
+    if ALLOWED_SENDER_DOMAIN and sender_domain != ALLOWED_SENDER_DOMAIN.lower():
+        logger.info(f"Sender {sender} not in allowed domain ({ALLOWED_SENDER_DOMAIN}), skipping")
+        _mark_processed(message_id)
+        return
 
     attachments = fetch_attachments(message_id)
     if not attachments:
