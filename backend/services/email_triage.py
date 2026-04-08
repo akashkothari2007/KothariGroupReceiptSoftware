@@ -48,11 +48,13 @@ async def pick_receipt_candidates(candidates: list[dict]) -> list[dict]:
     if not image_candidates:
         return []
 
-    if len(image_candidates) == 1:
-        c = image_candidates[0]
-        if c.get("is_inline") and len(c.get("content_bytes", b"")) < 5000:
-            return []
-        return image_candidates
+    # Skip tiny inline images (tracking pixels, logos)
+    image_candidates = [
+        c for c in image_candidates
+        if not (c.get("is_inline") and len(c.get("content_bytes", b"")) < 5000)
+    ]
+    if not image_candidates:
+        return []
 
     thumbnails = []
     for c in image_candidates:
