@@ -15,6 +15,7 @@ from routers.statements import router as statements_router
 from routers.transactions import router as transactions_router
 from routers.lookups import router as lookups_router
 from routers.receipts import router as receipts_router
+from routers.graph_webhook import router as graph_webhook_router
 
 app = FastAPI(title="Kothari Group Expenses")
 
@@ -35,6 +36,7 @@ app.include_router(statements_router)
 app.include_router(transactions_router)
 app.include_router(lookups_router)
 app.include_router(receipts_router)
+app.include_router(graph_webhook_router)
 
 
 @app.get("/health")

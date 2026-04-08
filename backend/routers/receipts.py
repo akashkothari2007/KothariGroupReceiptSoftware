@@ -1,7 +1,4 @@
-import uuid
 import os
-import re
-import asyncio
 import logging
 import threading
 from typing import Optional
@@ -11,88 +8,30 @@ from sqlalchemy import text
 from supabase import create_client
 from db import engine
 from middleware.auth import get_current_user
-from services.receipt_extractor import extract_receipt_data
+from services.receipt_ingest import ingest_receipt_bytes
 from services.match_run import run_matching_for_receipt
 from services.match_writer import remove_match
 
 logger = logging.getLogger("receipts")
 router = APIRouter(prefix="/receipts", tags=["receipts"], dependencies=[Depends(get_current_user)])
 
-ALLOWED_TYPES = {"image/jpeg", "image/png", "application/pdf", "image/heic", "image/heif"}
 BUCKET = "receipts"
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 
-def _run_extraction_bg(receipt_id: str, storage_path: str, file_type: str):
-    """Wrapper to run async extraction from a sync BackgroundTask."""
-    asyncio.run(extract_receipt_data(receipt_id, storage_path, file_type, supabase))
-
-
 @router.post("/upload")
-async def upload_receipt(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+async def upload_receipt(file: UploadFile = File(...)):
     logger.info(f"Upload request: filename={file.filename}, content_type={file.content_type}, size={file.size}")
-
-    if file.content_type not in ALLOWED_TYPES:
-        logger.warning(f"Rejected file type: {file.content_type} for {file.filename}")
-        raise HTTPException(status_code=400, detail=f"File type '{file.content_type}' not allowed. Use JPEG, PNG, PDF, or HEIC.")
-
     contents = await file.read()
-    logger.info(f"Read {len(contents)} bytes from {file.filename}")
-    # Sanitize filename — Supabase rejects special Unicode chars (e.g. narrow no-break space in macOS screenshots)
-    safe_name = re.sub(r'[^\w.\-]', '_', file.filename)
-    storage_filename = f"{uuid.uuid4()}_{safe_name}"
-
-    # Upload to Supabase Storage
     try:
-        supabase.storage.from_(BUCKET).upload(
-            path=storage_filename,
-            file=contents,
-            file_options={"content-type": file.content_type},
-        )
-        logger.info(f"Stored {storage_filename} in Supabase Storage")
+        result = ingest_receipt_bytes(contents, file.filename, file.content_type, source="manual")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Storage upload failed for {file.filename}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Storage upload failed: {str(e)}")
-
-    # Insert row into receipts table
-    with engine.begin() as conn:
-        result = conn.execute(
-            text("""
-                INSERT INTO receipts (image_url, file_type, file_name, source, processing_status)
-                VALUES (:image_url, :file_type, :file_name, 'manual', 'pending')
-                RETURNING id, image_url, file_name, file_type, source, match_status, processing_status, created_at
-            """),
-            {
-                "image_url": storage_filename,
-                "file_type": file.content_type,
-                "file_name": file.filename,
-            },
-        )
-        row = result.fetchone()
-
-    receipt_id = str(row[0])
-    logger.info(f"Receipt created: {receipt_id} — {file.filename} ({file.content_type})")
-
-    # Kick off AI extraction in background
-    background_tasks.add_task(_run_extraction_bg, receipt_id, storage_filename, file.content_type)
-    logger.info(f"Background extraction queued for {receipt_id}")
-
-    return {
-        "id": receipt_id,
-        "image_url": row[1],
-        "file_name": row[2],
-        "file_type": row[3],
-        "source": row[4],
-        "match_status": row[5],
-        "processing_status": row[6],
-        "merchant_name": None,
-        "receipt_date": None,
-        "tax_amount": None,
-        "tax_type": None,
-        "total_amount": None,
-        "created_at": str(row[7]),
-    }
+        logger.error(f"Upload failed for {file.filename}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    return result
 
 
 @router.get("")
