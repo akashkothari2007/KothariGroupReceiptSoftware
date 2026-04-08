@@ -79,6 +79,8 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
             ) : fileUrl ? (
               receipt.file_type && receipt.file_type.includes('pdf') ? (
                 <iframe src={fileUrl} className="receipt-pdf-embed" title={receipt.file_name} />
+              ) : receipt.file_type && receipt.file_type.includes('html') ? (
+                <iframe src={fileUrl} className="receipt-pdf-embed" title={receipt.file_name} sandbox="allow-same-origin" />
               ) : (
                 <img src={fileUrl} alt={receipt.file_name} className="receipt-image" />
               )

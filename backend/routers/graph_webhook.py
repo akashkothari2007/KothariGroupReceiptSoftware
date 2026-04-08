@@ -142,19 +142,15 @@ async def _try_body_extraction(
         logger.info(f"No receipt found in email body for {message_id}")
         return
 
-    receipt_text = extracted.get("receipt_text", "")
-    if not receipt_text:
-        receipt_text = f"Receipt from {extracted.get('merchant_name', 'unknown')} — ${extracted.get('total_amount', '?')}"
-
     safe_subject = subject[:60].replace("/", "_").replace("\\", "_").strip() or "email_receipt"
-    filename = f"{safe_subject}.txt"
-    file_bytes = receipt_text.encode("utf-8")
+    filename = f"{safe_subject}.html"
+    file_bytes = html_body.encode("utf-8")
 
     try:
         result = ingest_receipt_bytes(
             file_bytes=file_bytes,
             filename=filename,
-            content_type="text/plain",
+            content_type="text/html",
             source="email",
             email_message_id=message_id,
             email_sender=sender,

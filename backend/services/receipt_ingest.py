@@ -14,7 +14,7 @@ from services.match_run import run_matching_for_receipt
 
 logger = logging.getLogger("receipt_ingest")
 
-ALLOWED_TYPES = {"image/jpeg", "image/png", "application/pdf", "image/heic", "image/heif", "text/plain"}
+ALLOWED_TYPES = {"image/jpeg", "image/png", "application/pdf", "image/heic", "image/heif", "text/html"}
 BUCKET = "receipts"
 
 _supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))

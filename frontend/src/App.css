@@ -425,6 +425,11 @@ tr:hover td { background: #f9fafb; }
   color: #2563eb;
 }
 
+.receipt-type-icon.email {
+  background: #faf5ff;
+  color: #7c3aed;
+}
+
 .receipt-type-icon.file {
   background: #f3f4f6;
   color: #6b7280;

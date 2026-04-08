@@ -29,5 +29,6 @@ export const receiptMatchLabel = (s) => {
 export const fileTypeIcon = (type) => {
   if (!type) return 'FILE'
   if (type.includes('pdf')) return 'PDF'
+  if (type.includes('html')) return 'EMAIL'
   return 'IMG'
 }

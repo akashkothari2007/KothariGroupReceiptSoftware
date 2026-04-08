@@ -91,7 +91,11 @@ export function TransactionRow({
                 {receiptPreviewLoading ? (
                   <div className="shimmer-block" style={{ width: '100%', height: 200, borderRadius: 8 }} />
                 ) : receiptPreviewUrl ? (
-                  <img src={receiptPreviewUrl} alt="receipt" className="receipt-popup-img" />
+                  tx.receipt_file_type && (tx.receipt_file_type.includes('html') || tx.receipt_file_type.includes('pdf')) ? (
+                    <iframe src={receiptPreviewUrl} className="receipt-popup-img" title="receipt" sandbox="allow-same-origin" style={{ width: '100%', height: 300, border: 'none' }} />
+                  ) : (
+                    <img src={receiptPreviewUrl} alt="receipt" className="receipt-popup-img" />
+                  )
                 ) : (
                   <div className="receipt-preview-placeholder" style={{ padding: 20 }}>No preview</div>
                 )}
