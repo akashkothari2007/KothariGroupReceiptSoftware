@@ -8,7 +8,7 @@ logger = logging.getLogger("graph_client")
 TENANT_ID = os.getenv("GRAPH_TENANT_ID")
 CLIENT_ID = os.getenv("GRAPH_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GRAPH_CLIENT_SECRET")
-MAILBOX = os.getenv("GRAPH_MAILBOX", "receipts@kotharigroup.com")
+MAILBOX = os.getenv("GRAPH_MAILBOX")
 
 TOKEN_URL = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -116,19 +116,28 @@ def fetch_attachments(message_id: str) -> list[dict]:
     """
     Fetch all attachments for a message.
     Returns list of {name, content_type, content_bytes}.
+    Graph does not allow $select on contentBytes, so we fetch all fields.
     """
+    import base64
+
     with httpx.Client(timeout=60) as client:
         resp = client.get(
             f"{GRAPH_BASE}/users/{MAILBOX}/messages/{message_id}/attachments",
-            params={"$select": "id,name,contentType,contentBytes,isInline,contentId"},
             headers=_headers(),
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            logger.error(f"Attachments fetch failed ({resp.status_code}): {resp.text[:500]}")
+            resp.raise_for_status()
         data = resp.json()
 
-    import base64
     results = []
     for att in data.get("value", []):
+        odata_type = att.get("@odata.type", "")
+
+        if odata_type == "#microsoft.graph.itemAttachment":
+            logger.info(f"Skipping item attachment: {att.get('name')} (forwarded email)")
+            continue
+
         content_b64 = att.get("contentBytes")
         if not content_b64:
             continue
@@ -140,5 +149,5 @@ def fetch_attachments(message_id: str) -> list[dict]:
             "content_id": att.get("contentId"),
         })
 
-    logger.info(f"Fetched {len(results)} attachments for message {message_id}")
+    logger.info(f"Fetched {len(results)} file attachments for message {message_id}")
     return results
