@@ -90,9 +90,13 @@ export function TransactionRow({
                 </div>
                 {receiptPreviewLoading ? (
                   <div className="shimmer-block" style={{ width: '100%', height: 200, borderRadius: 8 }} />
+                ) : tx.receipt_file_type?.includes('html') ? (
+                  <div style={{ padding: 16, fontSize: 13, color: '#6b7280', textAlign: 'center' }}>
+                    Email receipt — open in Receipts tab to view
+                  </div>
                 ) : receiptPreviewUrl ? (
-                  tx.receipt_file_type && (tx.receipt_file_type.includes('html') || tx.receipt_file_type.includes('pdf')) ? (
-                    <iframe src={receiptPreviewUrl} className="receipt-popup-img" title="receipt" sandbox="allow-same-origin" style={{ width: '100%', height: 300, border: 'none' }} />
+                  tx.receipt_file_type?.includes('pdf') ? (
+                    <iframe src={receiptPreviewUrl} className="receipt-popup-img" title="receipt" style={{ width: '100%', height: 300, border: 'none' }} />
                   ) : (
                     <img src={receiptPreviewUrl} alt="receipt" className="receipt-popup-img" />
                   )

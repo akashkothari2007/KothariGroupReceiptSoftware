@@ -5,9 +5,12 @@ import { ProcessingDot } from './ProcessingDot'
 
 export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch, onConfirmMatch }) {
   const [fileUrl, setFileUrl] = useState(null)
+  const [htmlContent, setHtmlContent] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
   const [fields, setFields] = useState({})
   const debounce = useDebounce()
+
+  const isHtml = receipt?.file_type?.includes('html')
 
   useEffect(() => {
     if (!receipt) return
@@ -22,8 +25,16 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
     })
     setLoadingUrl(true)
     setFileUrl(null)
+    setHtmlContent(null)
     getReceiptUrl(receipt.id)
-      .then(url => setFileUrl(url))
+      .then(async (url) => {
+        setFileUrl(url)
+        if (receipt.file_type?.includes('html')) {
+          const resp = await fetch(url)
+          const text = await resp.text()
+          setHtmlContent(text)
+        }
+      })
       .catch(() => setFileUrl(null))
       .finally(() => setLoadingUrl(false))
   }, [receipt])
@@ -79,11 +90,11 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
             ) : fileUrl ? (
               receipt.file_type && receipt.file_type.includes('pdf') ? (
                 <iframe src={fileUrl} className="receipt-pdf-embed" title={receipt.file_name} />
-              ) : receipt.file_type && receipt.file_type.includes('html') ? (
-                <iframe src={fileUrl} className="receipt-pdf-embed" title={receipt.file_name} sandbox="allow-same-origin" />
-              ) : (
+              ) : isHtml && htmlContent ? (
+                <iframe srcDoc={htmlContent} className="receipt-pdf-embed" title={receipt.file_name} sandbox="allow-same-origin" />
+              ) : !isHtml ? (
                 <img src={fileUrl} alt={receipt.file_name} className="receipt-image" />
-              )
+              ) : null
             ) : (
               <div className="receipt-preview-placeholder">
                 <span className="receipt-icon-large">?</span>
