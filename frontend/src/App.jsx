@@ -129,7 +129,7 @@ function App() {
     const form = new FormData()
     form.append('file', file)
     try {
-      const res = await authFetch(`${API}/upload/statement`, { method: 'POST', body: form })
+      const res = await authFetch(`${API}/statements/upload`, { method: 'POST', body: form })
       const data = await res.json()
       await fetchStatements()
       setCurrentId(data.statement_id)

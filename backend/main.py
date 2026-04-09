@@ -13,7 +13,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("app")
-from routers.uploads import router as uploads_router
 from routers.statements import router as statements_router
 from routers.transactions import router as transactions_router
 from routers.lookups import router as lookups_router
@@ -60,7 +59,6 @@ app.add_middleware(
 )
 
 
-app.include_router(uploads_router)
 app.include_router(statements_router)
 app.include_router(transactions_router)
 app.include_router(lookups_router)
