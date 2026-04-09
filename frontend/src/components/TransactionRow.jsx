@@ -34,7 +34,17 @@ export function TransactionRow({
         )}
       </td>
       <td className="amount-cell tax-cell">
-        {tx.tax_amount != null ? formatMoney(tx.tax_amount) : <span className="empty-dash">&mdash;</span>}
+        <input
+          type="number"
+          step="0.01"
+          value={tx.tax_amount != null ? tx.tax_amount : ''}
+          onChange={e => {
+            const val = e.target.value
+            updateTransaction(tx.id, 'tax_amount', val === '' ? null : parseFloat(val))
+          }}
+          className="cell-input cell-input-num"
+          placeholder="—"
+        />
       </td>
       <td>
         <select
