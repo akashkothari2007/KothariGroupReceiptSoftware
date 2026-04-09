@@ -1222,3 +1222,157 @@ tr:hover td { background: #f9fafb; }
   font-weight: 700;
   font-size: 14px;
 }
+
+/* ── Settings Tab ── */
+.settings-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 700px;
+}
+
+.settings-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.settings-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.settings-table thead th {
+  padding: 8px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.settings-table tbody td {
+  padding: 8px 14px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+
+.settings-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.settings-value {
+  font-size: 13px;
+}
+
+.settings-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #111827;
+  background: #fff;
+  transition: border-color 0.15s;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.settings-input::placeholder {
+  color: #d1d5db;
+}
+
+.settings-actions-col {
+  width: 140px;
+}
+
+.settings-actions {
+  white-space: nowrap;
+}
+
+.settings-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-right: 4px;
+  background: #fff;
+  color: #374151;
+}
+
+.settings-btn:hover {
+  background: #f3f4f6;
+}
+
+.settings-btn-save {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.settings-btn-save:hover {
+  background: #374151;
+}
+
+.settings-btn-add {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.settings-btn-add:hover {
+  background: #374151;
+}
+
+.settings-btn-add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-btn-delete {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.settings-btn-delete:hover {
+  background: #fef2f2;
+}
+
+.settings-btn-cancel {
+  color: #6b7280;
+}
+
+.settings-add-row td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+
+.settings-empty {
+  padding: 20px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+}

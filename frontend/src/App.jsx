@@ -6,6 +6,7 @@ import { useAuth } from './hooks/useAuth'
 import { StatementsTab } from './components/StatementsTab'
 import { ReceiptsTab } from './components/ReceiptsTab'
 import { ReceiptDetailModal } from './components/ReceiptDetailModal'
+import { SettingsTab } from './components/SettingsTab'
 
 function App() {
   const { signOut } = useAuth()
@@ -59,13 +60,17 @@ function App() {
     if (!silent) setLoadingTx(false)
   }, [])
 
+  const refreshLookups = useCallback(() => {
+    authFetch(`${API}/lookups/gl-codes`).then(r => r.json()).then(setGlCodes)
+    authFetch(`${API}/lookups/companies`).then(r => r.json()).then(setCompanies)
+  }, [])
+
   useEffect(() => {
     fetchStatements().then(data => {
       if (data.length > 0) setCurrentId(data[0].id)
     })
-    authFetch(`${API}/lookups/gl-codes`).then(r => r.json()).then(setGlCodes)
-    authFetch(`${API}/lookups/companies`).then(r => r.json()).then(setCompanies)
-  }, [fetchStatements])
+    refreshLookups()
+  }, [fetchStatements, refreshLookups])
 
   useEffect(() => {
     if (currentId) {
@@ -392,6 +397,12 @@ function App() {
         >
           Receipts
         </button>
+        <button
+          className={`tab ${activeTab === 'settings' ? 'tab-active' : ''}`}
+          onClick={() => setActiveTab('settings')}
+        >
+          Settings
+        </button>
       </div>
 
       {activeTab === 'statements' && (
@@ -444,6 +455,14 @@ function App() {
           handleConfirmMatch={handleConfirmMatch}
           setSelectedReceipt={setSelectedReceipt}
           receiptFileRef={receiptFileRef}
+        />
+      )}
+
+      {activeTab === 'settings' && (
+        <SettingsTab
+          companies={companies}
+          glCodes={glCodes}
+          onRefresh={refreshLookups}
         />
       )}
 
