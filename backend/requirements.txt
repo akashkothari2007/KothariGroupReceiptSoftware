@@ -10,3 +10,4 @@ pymupdf
 pillow
 pillow-heif
 python-jose[cryptography]
+reportlab

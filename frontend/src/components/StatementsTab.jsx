@@ -1,6 +1,6 @@
-import { useRef } from 'react'
 import { ShimmerRows } from './ShimmerRows'
 import { TransactionRow } from './TransactionRow'
+import { ExpenseReportSection } from './ExpenseReportSection'
 import { formatMoney, formatUploadDate } from '../utils/formatters'
 
 export function StatementsTab({
@@ -118,6 +118,15 @@ export function StatementsTab({
             </tbody>
           </table>
         </div>
+      )}
+
+      {currentStatement && !loadingTx && transactions.length > 0 && (
+        <ExpenseReportSection
+          transactions={transactions}
+          companies={companies}
+          glCodes={glCodes}
+          statementId={currentId}
+        />
       )}
 
       {!currentStatement && (

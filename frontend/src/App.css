@@ -1022,3 +1022,191 @@ tr:hover td { background: #f9fafb; }
   color: #15803d;
   font-size: 12px;
 }
+
+/* ── Expense Reports Section ── */
+.expense-reports-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 2px solid #e5e7eb;
+}
+
+.expense-reports-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.expense-reports-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.expense-reports-count {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.expense-report-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.expense-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  font-family: inherit;
+}
+
+.expense-chip:hover {
+  border-color: #d1d5db;
+  background: #f9fafb;
+}
+
+.expense-chip.active {
+  border-color: #111827;
+  background: #111827;
+}
+
+.expense-chip.active .expense-chip-name {
+  color: #fff;
+}
+
+.expense-chip.active .expense-chip-meta {
+  color: #9ca3af;
+}
+
+.expense-chip-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.expense-chip-meta {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.expense-report-detail {
+  margin-top: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.expense-report-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.expense-report-detail-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.expense-download-btn {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  background: #111827;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.expense-download-btn:hover {
+  background: #374151;
+}
+
+.expense-download-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.expense-report-table-wrapper {
+  overflow-x: auto;
+}
+
+.expense-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.expense-report-table thead th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.expense-report-table tbody td {
+  padding: 7px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+
+.expense-report-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.expense-totals-row {
+  border-top: 2px solid #e5e7eb;
+}
+
+.expense-totals-row td {
+  padding: 8px 12px;
+  font-weight: 600;
+  color: #111827;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.expense-totals-label {
+  text-align: right;
+  padding-right: 16px;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.expense-totals-val {
+  font-weight: 700;
+}
+
+.expense-net-row td {
+  padding: 10px 12px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #111827;
+  border-bottom: none;
+}
+
+.expense-net-val {
+  font-weight: 700;
+  font-size: 14px;
+}
