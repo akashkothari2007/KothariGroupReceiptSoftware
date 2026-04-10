@@ -1,10 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import { API, authFetch } from '../utils/api'
-import { formatDate, formatMoney } from '../utils/formatters'
+import { formatDate, formatMoney, formatUploadDate } from '../utils/formatters'
 
 export function ExpenseReportSection({ transactions, companies, glCodes, statementId }) {
   const [expandedCompanyId, setExpandedCompanyId] = useState(null)
   const [downloading, setDownloading] = useState(null)
+  const [finalizing, setFinalizing] = useState(null)
+  const [approving, setApproving] = useState(null)
+  const [deleting, setDeleting] = useState(null)
+  const [reports, setReports] = useState([])
 
   const companyMap = useMemo(() => {
     const m = {}
@@ -39,6 +43,25 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
     return Object.values(groups).sort((a, b) => a.company_name.localeCompare(b.company_name))
   }, [transactions, companyMap])
 
+  const fetchReports = useCallback(async () => {
+    if (!statementId) return
+    try {
+      const res = await authFetch(`${API}/expense-reports/?statement_id=${statementId}`)
+      if (res.ok) setReports(await res.json())
+    } catch { /* ignore */ }
+  }, [statementId])
+
+  useEffect(() => { fetchReports() }, [fetchReports])
+
+  const reportsByCompany = useMemo(() => {
+    const m = {}
+    for (const r of reports) {
+      if (!m[r.company_id]) m[r.company_id] = []
+      m[r.company_id].push(r)
+    }
+    return m
+  }, [reports])
+
   if (grouped.length === 0) return null
 
   const handleDownload = async (companyId) => {
@@ -61,6 +84,74 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
     setDownloading(null)
   }
 
+  const handleFinalize = async (companyId) => {
+    setFinalizing(companyId)
+    try {
+      const res = await authFetch(
+        `${API}/expense-reports/${statementId}/finalize?company_id=${companyId}`,
+        { method: 'POST' }
+      )
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || 'Finalize failed')
+      }
+      await fetchReports()
+    } catch (err) {
+      alert('Failed to finalize: ' + err.message)
+    }
+    setFinalizing(null)
+  }
+
+  const handleApprove = async (reportId) => {
+    setApproving(reportId)
+    try {
+      const res = await authFetch(
+        `${API}/expense-reports/${reportId}/approve`,
+        { method: 'POST' }
+      )
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || 'Approve failed')
+      }
+      await fetchReports()
+    } catch (err) {
+      alert('Failed to approve: ' + err.message)
+    }
+    setApproving(null)
+  }
+
+  const handleDownloadReport = async (reportId, companyName, status) => {
+    setDownloading(reportId)
+    try {
+      const res = await authFetch(`${API}/expense-reports/${reportId}/download`)
+      if (!res.ok) throw new Error('Download failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const safe = (companyName || 'report').replace(/\s+/g, '_')
+      const suffix = status === 'approved' ? '_APPROVED' : '_PENDING'
+      a.download = `Expense_Report_${safe}${suffix}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert('Download failed: ' + err.message)
+    }
+    setDownloading(null)
+  }
+
+  const handleDeleteReport = async (reportId) => {
+    if (!confirm('Delete this finalized report?')) return
+    setReports(prev => prev.filter(r => r.id !== reportId))
+    try {
+      const res = await authFetch(`${API}/expense-reports/${reportId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Delete failed')
+    } catch (err) {
+      alert('Delete failed: ' + err.message)
+      await fetchReports()
+    }
+  }
+
   const expanded = grouped.find(g => g.company_id === expandedCompanyId)
 
   return (
@@ -71,33 +162,52 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
       </div>
 
       <div className="expense-report-chips">
-        {grouped.map(g => (
-          <button
-            key={g.company_id}
-            className={`expense-chip${expandedCompanyId === g.company_id ? ' active' : ''}`}
-            onClick={() => setExpandedCompanyId(
-              expandedCompanyId === g.company_id ? null : g.company_id
-            )}
-          >
-            <span className="expense-chip-name">{g.company_name}</span>
-            <span className="expense-chip-meta">
-              {g.transactions.length} tx &middot; {formatMoney(g.total_amount)}
-            </span>
-          </button>
-        ))}
+        {grouped.map(g => {
+          const companyReports = reportsByCompany[g.company_id] || []
+          const hasApproved = companyReports.some(r => r.status === 'approved')
+          const hasPending = companyReports.some(r => r.status === 'pending')
+
+          let badge = null
+          if (hasApproved) badge = <span className="chip-badge approved">Approved</span>
+          else if (hasPending) badge = <span className="chip-badge pending">Pending</span>
+
+          return (
+            <button
+              key={g.company_id}
+              className={`expense-chip${expandedCompanyId === g.company_id ? ' active' : ''}`}
+              onClick={() => setExpandedCompanyId(
+                expandedCompanyId === g.company_id ? null : g.company_id
+              )}
+            >
+              <span className="expense-chip-name">{g.company_name} {badge}</span>
+              <span className="expense-chip-meta">
+                {g.transactions.length} tx &middot; {formatMoney(g.total_amount)}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {expanded && (
         <div className="expense-report-detail">
           <div className="expense-report-detail-header">
             <h4 className="expense-report-detail-title">{expanded.company_name}</h4>
-            <button
-              className="expense-download-btn"
-              onClick={() => handleDownload(expanded.company_id)}
-              disabled={downloading === expanded.company_id}
-            >
-              {downloading === expanded.company_id ? 'Generating...' : 'Download PDF'}
-            </button>
+            <div className="expense-report-actions">
+              <button
+                className="expense-download-btn"
+                onClick={() => handleDownload(expanded.company_id)}
+                disabled={downloading === expanded.company_id}
+              >
+                {downloading === expanded.company_id ? 'Generating...' : 'Download PDF'}
+              </button>
+              <button
+                className="expense-finalize-btn"
+                onClick={() => handleFinalize(expanded.company_id)}
+                disabled={finalizing === expanded.company_id}
+              >
+                {finalizing === expanded.company_id ? 'Finalizing...' : 'Finalize Report'}
+              </button>
+            </div>
           </div>
 
           <div className="expense-report-table-wrapper">
@@ -142,6 +252,58 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
               </tfoot>
             </table>
           </div>
+
+          {/* Finalized reports for this company */}
+          {(reportsByCompany[expanded.company_id] || []).length > 0 && (
+            <div className="finalized-reports">
+              <h5 className="finalized-reports-title">Finalized Reports</h5>
+              {(reportsByCompany[expanded.company_id] || []).map(r => (
+                <div key={r.id} className={`finalized-report-card ${r.status}`}>
+                  <div className="finalized-report-info">
+                    <span className={`report-status-badge ${r.status}`}>
+                      {r.status === 'approved' ? 'Approved' : 'Pending Approval'}
+                    </span>
+                    <span className="report-meta">
+                      {r.transaction_count} tx &middot; {formatMoney(r.total_amount)}
+                    </span>
+                    <span className="report-meta-detail">
+                      Created by {r.created_by}{r.created_at ? ` on ${formatUploadDate(r.created_at)}` : ''}
+                    </span>
+                    {r.approved_by && (
+                      <span className="report-meta-detail">
+                        Approved by {r.approved_by}{r.approved_at ? ` on ${formatUploadDate(r.approved_at)}` : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div className="finalized-report-actions">
+                    <button
+                      className="report-action-btn download"
+                      onClick={() => handleDownloadReport(r.id, r.company_name, r.status)}
+                      disabled={downloading === r.id}
+                    >
+                      {downloading === r.id ? '...' : 'Download'}
+                    </button>
+                    {r.status === 'pending' && (
+                      <button
+                        className="report-action-btn approve"
+                        onClick={() => handleApprove(r.id)}
+                        disabled={approving === r.id}
+                      >
+                        {approving === r.id ? '...' : 'Approve'}
+                      </button>
+                    )}
+                    <button
+                      className="report-action-btn delete"
+                      onClick={() => handleDeleteReport(r.id)}
+                      disabled={deleting === r.id}
+                    >
+                      {deleting === r.id ? '...' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

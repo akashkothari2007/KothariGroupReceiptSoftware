@@ -9,6 +9,8 @@ from reportlab.platypus import (
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_RIGHT, TA_CENTER
 
+import fitz  # pymupdf — already installed for receipt processing
+
 
 def _fmt_money(val):
     if val is None:
@@ -28,12 +30,27 @@ def _fmt_date(d):
     return d.strftime("%b %d, %Y")
 
 
+def _fmt_datetime(dt):
+    if not dt:
+        return ""
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except ValueError:
+            return dt
+    return dt.strftime("%b %d, %Y at %I:%M %p")
+
+
 def generate_pdf(
     company_name: str,
     statement_filename: str,
     cycle_start,
     cycle_end,
     transactions: list[dict],
+    created_by: str = None,
+    created_at=None,
+    approved_by: str = None,
+    approved_at=None,
 ) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -69,12 +86,6 @@ def generate_pdf(
         fontSize=9,
         alignment=TA_RIGHT,
     )
-    center_style = ParagraphStyle(
-        "CenterAlign",
-        parent=styles["Normal"],
-        fontSize=9,
-        alignment=TA_CENTER,
-    )
     cell_style = ParagraphStyle(
         "Cell",
         parent=styles["Normal"],
@@ -91,6 +102,14 @@ def generate_pdf(
         parent=right_style,
         fontName="Helvetica-Bold",
         fontSize=9,
+    )
+    footer_style = ParagraphStyle(
+        "FooterInfo",
+        parent=styles["Normal"],
+        fontSize=8,
+        textColor=colors.HexColor("#9ca3af"),
+        alignment=TA_CENTER,
+        leading=12,
     )
 
     elements = []
@@ -221,11 +240,49 @@ def generate_pdf(
     summary_table.setStyle(summary_style)
     elements.append(summary_table)
 
-    elements.append(Spacer(1, 30))
-    elements.append(Paragraph(
-        f"{len(transactions)} transaction{'s' if len(transactions) != 1 else ''} | {company_name}",
-        ParagraphStyle("Footer", parent=styles["Normal"], fontSize=8, textColor=colors.HexColor("#9ca3af"), alignment=TA_CENTER),
-    ))
+    elements.append(Spacer(1, 24))
+
+    footer_lines = []
+    footer_lines.append(
+        f"{len(transactions)} transaction{'s' if len(transactions) != 1 else ''} | {company_name}"
+    )
+    if created_by:
+        footer_lines.append(
+            f"Created by {created_by}" + (f" on {_fmt_datetime(created_at)}" if created_at else "")
+        )
+    if approved_by:
+        footer_lines.append(
+            f"Approved by {approved_by}" + (f" on {_fmt_datetime(approved_at)}" if approved_at else "")
+        )
+
+    elements.append(Paragraph("<br/>".join(footer_lines), footer_style))
 
     doc.build(elements)
     return buf.getvalue()
+
+
+def add_watermark(pdf_bytes: bytes, text: str = "PENDING APPROVAL") -> bytes:
+    """Overlay a faded diagonal watermark on every page of an existing PDF."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    for page in doc:
+        rect = page.rect
+        cx, cy = rect.width / 2, rect.height / 2
+
+        tw = fitz.get_text_length(text, fontname="helv", fontsize=54)
+        x = cx - tw / 2
+
+        page.insert_text(
+            fitz.Point(x, cy),
+            text,
+            fontname="helv",
+            fontsize=54,
+            color=(0.85, 0.85, 0.85),
+            rotate=0,
+            overlay=True,
+        )
+
+    out = io.BytesIO()
+    doc.save(out)
+    doc.close()
+    return out.getvalue()
