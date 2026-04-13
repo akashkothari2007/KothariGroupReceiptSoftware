@@ -9,6 +9,31 @@ from services.match_writer import apply_match, remove_match
 router = APIRouter(prefix="/transactions", tags=["transactions"], dependencies=[Depends(get_current_user)])
 
 
+@router.get("/{transaction_id}")
+def get_transaction(transaction_id: str):
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("""
+                SELECT t.id, t.statement_id, t.merchant, t.amount_cad, t.transaction_date,
+                       s.card_account_id
+                FROM transactions t
+                LEFT JOIN statements s ON s.id = t.statement_id
+                WHERE t.id = :tid
+            """),
+            {"tid": transaction_id},
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {
+        "id": str(row[0]),
+        "statement_id": str(row[1]) if row[1] else None,
+        "merchant": row[2],
+        "amount_cad": float(row[3]) if row[3] is not None else None,
+        "transaction_date": row[4].isoformat() if row[4] else None,
+        "card_account_id": str(row[5]) if row[5] else None,
+    }
+
+
 class TransactionUpdate(BaseModel):
     merchant: Optional[str] = None
     description: Optional[str] = None

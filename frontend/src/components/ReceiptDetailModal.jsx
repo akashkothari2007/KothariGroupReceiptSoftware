@@ -3,7 +3,7 @@ import { useDebounce } from '../hooks/useDebounce'
 import { API, authFetch, getReceiptUrl } from '../utils/api'
 import { ProcessingDot } from './ProcessingDot'
 
-export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch, onConfirmMatch }) {
+export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch, onConfirmMatch, onGoToTransaction }) {
   const [fileUrl, setFileUrl] = useState(null)
   const [htmlContent, setHtmlContent] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
@@ -158,7 +158,12 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
             {receipt.transaction_id && (
               <div className="meta-row meta-row-linked">
                 <span className="meta-label">Linked transaction</span>
-                <span className="meta-value meta-value-linked">
+                <span
+                  className="meta-value meta-value-linked"
+                  style={onGoToTransaction ? { cursor: 'pointer', textDecoration: 'underline' } : {}}
+                  onClick={() => onGoToTransaction && onGoToTransaction(receipt.transaction_id)}
+                  title={onGoToTransaction ? 'Go to transaction' : ''}
+                >
                   {receipt.tx_merchant || 'Transaction'} — {receipt.tx_amount != null ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(receipt.tx_amount) : ''}
                   {receipt.tx_date ? ` (${receipt.tx_date})` : ''}
                 </span>

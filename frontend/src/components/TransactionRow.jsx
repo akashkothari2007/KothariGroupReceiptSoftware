@@ -7,7 +7,7 @@ export function TransactionRow({
   setReceiptPreviewTxId, linkingTxId, setLinkingTxId,
 }) {
   return (
-    <tr className={tx.amount_cad < 0 ? 'credit-row' : ''}>
+    <tr className={tx.amount_cad < 0 ? 'credit-row' : ''} data-tx-id={tx.id}>
       <td className="date-cell">{formatDate(tx.transaction_date)}</td>
       <td>
         <input
@@ -110,6 +110,7 @@ export function TransactionRow({
                   <span className="receipt-popup-title">{tx.receipt_merchant || tx.receipt_file_name}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
+                      type="button"
                       className="btn"
                       style={{ padding: '4px 8px', fontSize: 12 }}
                       onClick={() => {
@@ -121,7 +122,7 @@ export function TransactionRow({
                     >
                       Expand
                     </button>
-                    <button className="modal-close" onClick={() => setReceiptPreviewTxId(null)}>&times;</button>
+                    <button type="button" className="modal-close" onClick={() => setReceiptPreviewTxId(null)}>&times;</button>
                   </div>
                 </div>
                 {receiptPreviewLoading ? (

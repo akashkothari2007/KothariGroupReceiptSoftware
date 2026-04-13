@@ -19,7 +19,7 @@ BUCKET = "receipts"
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-
+# manual upload of receipts
 @router.post("/upload")
 async def upload_receipt(file: UploadFile = File(...)):
     logger.info(f"Upload request: filename={file.filename}, content_type={file.content_type}, size={file.size}")
@@ -43,7 +43,7 @@ def list_receipts():
                        r.merchant_name, r.receipt_date, r.tax_amount, r.tax_type,
                        r.total_amount, r.match_status, r.processing_status, r.created_at,
                        r.transaction_id, t.merchant as tx_merchant, t.amount_cad as tx_amount,
-                       t.transaction_date as tx_date, r.country, r.city, r.province
+                       t.transaction_date as tx_date, r.country
                 FROM receipts r
                 LEFT JOIN transactions t ON t.id = r.transaction_id
                 ORDER BY r.created_at DESC
@@ -71,13 +71,11 @@ def list_receipts():
             "tx_amount": float(r[15]) if r[15] is not None else None,
             "tx_date": str(r[16]) if r[16] else None,
             "country": r[17],
-            "city": r[18],
-            "province": r[19],
         }
         for r in rows
     ]
 
-
+# receipt metadata
 @router.get("/{receipt_id}")
 def get_receipt(receipt_id: str):
     with engine.connect() as conn:
@@ -85,9 +83,9 @@ def get_receipt(receipt_id: str):
             text("""
                 SELECT id, image_url, file_type, file_name, source,
                        merchant_name, receipt_date, subtotal, tax_amount, tax_type,
-                       total_amount, country, city, province, raw_ai_response, company_id, gl_code_id,
+                       total_amount, country, raw_ai_response,
                        email_message_id, email_received_at, email_sender,
-                       transaction_id, match_status, match_method, processing_status, created_at
+                       transaction_id, match_status, processing_status, created_at
                 FROM receipts
                 WHERE id = :id
             """),
@@ -111,26 +109,23 @@ def get_receipt(receipt_id: str):
         "tax_type": r[9],
         "total_amount": float(r[10]) if r[10] is not None else None,
         "country": r[11],
-        "city": r[12],
-        "province": r[13],
-        "raw_ai_response": r[14],
-        "company_id": str(r[15]) if r[15] else None,
-        "gl_code_id": str(r[16]) if r[16] else None,
-        "email_message_id": r[17],
-        "email_received_at": str(r[18]) if r[18] else None,
-        "email_sender": r[19],
-        "transaction_id": str(r[20]) if r[20] else None,
-        "match_status": r[21],
-        "match_method": r[22],
-        "processing_status": r[23],
-        "created_at": str(r[24]),
+        "raw_ai_response": r[12],
+        "company_id": None,
+        "gl_code_id": None,
+        "email_message_id": r[13],
+        "email_received_at": str(r[14]) if r[14] else None,
+        "email_sender": r[15],
+        "transaction_id": str(r[16]) if r[16] else None,
+        "match_status": r[17],
+        "processing_status": r[18],
+        "created_at": str(r[19]),
     }
 
 
 RECEIPT_ALLOWED_FIELDS = {
     "merchant_name", "receipt_date", "subtotal", "tax_amount", "tax_type",
-    "total_amount", "country", "city", "province", "company_id", "gl_code_id", "notes",
-    "match_status", "match_method", "processing_status", "raw_ai_response",
+    "total_amount", "country", "city", "province", "notes",
+    "match_status", "processing_status", "raw_ai_response",
 }
 
 
@@ -144,8 +139,6 @@ class ReceiptUpdate(BaseModel):
     country: Optional[str] = None
     city: Optional[str] = None
     province: Optional[str] = None
-    company_id: Optional[str] = None
-    gl_code_id: Optional[str] = None
     match_status: Optional[str] = None
     processing_status: Optional[str] = None
 
@@ -217,24 +210,15 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
     if row[2] not in ("failed", "completed"):
         raise HTTPException(status_code=400, detail=f"Receipt is {row[2]}, not retryable")
 
-    # Unlink the transaction side first (if matched), then reset receipt
+    # Reset extracted fields and status
     with engine.begin() as conn:
-        conn.execute(
-            text("""
-                UPDATE transactions
-                SET matched_receipt_id = NULL, match_status = 'unmatched', tax_amount = NULL
-                WHERE matched_receipt_id = :id
-            """),
-            {"id": receipt_id},
-        )
         conn.execute(
             text("""
                 UPDATE receipts
                 SET processing_status = 'pending',
                     merchant_name = NULL, receipt_date = NULL, subtotal = NULL,
                     tax_amount = NULL, tax_type = NULL, total_amount = NULL,
-                    country = NULL, city = NULL, province = NULL,
-                    raw_ai_response = NULL,
+                    country = NULL, raw_ai_response = NULL,
                     transaction_id = NULL, match_status = 'unmatched'
                 WHERE id = :id
             """),

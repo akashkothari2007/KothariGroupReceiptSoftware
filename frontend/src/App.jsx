@@ -38,7 +38,7 @@ function App() {
   const [receiptMenuOpen, setReceiptMenuOpen] = useState(null)
   const [receiptFilter, setReceiptFilter] = useState({ unmatched: true, unsure: true, matched: false })
   const [linkingTxId, setLinkingTxId] = useState(null) // tx id with open receipt picker
-  const [receiptPreviewTxId, setReceiptPreviewTxId] = useState(null) // tx id showing receipt popup
+  const [receiptPreviewTxId, setReceiptPreviewTxId] = useState(null)
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState(null)
   const [receiptPreviewLoading, setReceiptPreviewLoading] = useState(false)
   const receiptFileRef = useRef()
@@ -302,13 +302,18 @@ function App() {
   }
 
   const showReceiptPreview = async (txId, receiptId) => {
-    if (receiptPreviewTxId === txId) { setReceiptPreviewTxId(null); return }
+    if (receiptPreviewTxId === txId) {
+      setReceiptPreviewTxId(null)
+      return
+    }
     setReceiptPreviewTxId(txId)
     setReceiptPreviewUrl(null)
     setReceiptPreviewLoading(true)
     try {
       setReceiptPreviewUrl(await getReceiptUrl(receiptId))
-    } catch { setReceiptPreviewUrl(null) }
+    } catch {
+      setReceiptPreviewUrl(null)
+    }
     setReceiptPreviewLoading(false)
   }
 
