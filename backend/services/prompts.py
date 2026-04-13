@@ -6,7 +6,7 @@ Return ONLY valid JSON with these exact keys:
   "receipt_date": "YYYY-MM-DD format or null if not found",
   "subtotal": 0.00,
   "tax_amount": 0.00,
-  "tax_type": "HST or GST or GST+PST or none",
+  "tax_type": "HST or GST or none",
   "total_amount": 0.00,
   "country": "CA or US (2-letter code)",
   "is_refund": false
@@ -36,8 +36,8 @@ REFUND RULES:
 - If is_refund is true, still report total_amount as a positive number
 
 TAX RULES:
-- tax_type: use "HST" for Ontario (13%), "GST" for Alberta/BC/SK/MB (5%), "GST+PST" for BC (5%+7%), "GST+QST" for Quebec, "none" if no tax or foreign
-- If tax is labeled "Tax" with no type and is ~13%, assume HST; if ~5%, assume GST
+- tax_type: use "HST" for provinces with harmonized sales tax (ON 13%, NB/NL/NS 15%, PEI 15%), "GST" for provinces without HST (AB/BC/SK/MB/QC 5% federal portion only), "none" if no tax or foreign
+- If tax is labeled "Tax" with no type and is ~13-15%, assume HST; if ~5%, assume GST
 - For foreign receipts, set tax_amount to 0 and tax_type to "none"
 
 COUNTRY RULES:
@@ -66,7 +66,7 @@ If it IS a receipt, return ONLY valid JSON:
   "receipt_date": "YYYY-MM-DD or null",
   "subtotal": 0.00,
   "tax_amount": 0.00,
-  "tax_type": "HST or GST or GST+PST or none",
+  "tax_type": "HST or GST or none",
   "total_amount": 0.00,
   "country": "CA or US (2-letter code)",
   "is_refund": false,
@@ -77,7 +77,7 @@ Rules:
 - All dollar amounts as numbers (no $ sign), null if not found
 - receipt_date: the purchase/billing date, NOT travel/service dates. YYYY-MM-DD or null.
 - total_amount: positive even for refunds. Use is_refund field instead.
-- tax_type: "HST" for Ontario 13%, "GST" for 5%, "GST+PST" for BC, "none" for foreign/no tax
+- tax_type: "HST" for harmonized provinces (ON/NB/NL/NS/PEI), "GST" for 5% federal only, "none" for foreign/no tax
 - country: default "CA". Only use other codes if clearly foreign (USD stated, US address, etc.)
 - receipt_text: extract ONLY the receipt/order portion. Strip email headers, signatures, disclaimers, forwarding headers, marketing footers. Keep merchant name, items, amounts, dates, totals.
 - Return ONLY the JSON object, no markdown, no explanation

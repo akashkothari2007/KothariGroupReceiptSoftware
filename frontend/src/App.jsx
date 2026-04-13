@@ -18,6 +18,7 @@ function App() {
   const [transactions, setTransactions] = useState([])
   const [glCodes, setGlCodes] = useState([])
   const [companies, setCompanies] = useState([])
+  const [expenseTypes, setExpenseTypes] = useState([])
   const [uploading, setUploading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [loadingStatements, setLoadingStatements] = useState(true)
@@ -63,6 +64,7 @@ function App() {
   const refreshLookups = useCallback(() => {
     authFetch(`${API}/lookups/gl-codes`).then(r => r.json()).then(setGlCodes)
     authFetch(`${API}/lookups/companies`).then(r => r.json()).then(setCompanies)
+    authFetch(`${API}/lookups/expense-types`).then(r => r.json()).then(setExpenseTypes)
   }, [])
 
   useEffect(() => {
@@ -419,6 +421,7 @@ function App() {
           loadingTx={loadingTx}
           glCodes={glCodes}
           companies={companies}
+          expenseTypes={expenseTypes}
           receipts={receipts}
           fetchStatements={fetchStatements}
           fetchTransactions={fetchTransactions}
@@ -462,6 +465,7 @@ function App() {
         <SettingsTab
           companies={companies}
           glCodes={glCodes}
+          expenseTypes={expenseTypes}
           onRefresh={refreshLookups}
         />
       )}

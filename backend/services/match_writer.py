@@ -5,7 +5,7 @@ apply_match(tx_id, receipt_id, match_status, match_method)
   - Links receipt to transaction (matched_receipt_id)
   - Updates match_status on both transaction and receipt
   - Auto-fills tax_amount on transaction based on country rule:
-      Canadian receipt (HST/GST/PST) → copy tax from receipt
+      Canadian receipt (HST/GST) → copy tax from receipt
       Foreign or no tax → set tax to 0
 
 This is a standalone function so it can be called from:
@@ -19,7 +19,7 @@ from db import engine
 
 logger = logging.getLogger("match_writer")
 
-CANADIAN_TAX_TYPES = {"HST", "GST", "PST", "GST+PST", "GST+QST"}
+CANADIAN_TAX_TYPES = {"HST", "GST"}
 
 
 def apply_match(transaction_id: str, receipt_id: str, match_status: str, match_method: str):

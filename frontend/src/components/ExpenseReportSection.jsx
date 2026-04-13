@@ -85,6 +85,14 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
   }
 
   const handleFinalize = async (companyId) => {
+    const group = grouped.find(g => g.company_id === companyId)
+    if (group) {
+      const missing = group.transactions.filter(tx => !tx.gl_code_id)
+      if (missing.length > 0) {
+        alert(`${missing.length} transaction${missing.length === 1 ? ' is' : 's are'} missing GL code assignments. Please assign GL codes before finalizing.`)
+        return
+      }
+    }
     setFinalizing(companyId)
     try {
       const res = await authFetch(
@@ -219,7 +227,7 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
                   <th>Description</th>
                   <th>GL Code</th>
                   <th className="amount-col">Amount</th>
-                  <th className="amount-col">Tax</th>
+                  <th className="amount-col">Tax (HST/GST)</th>
                 </tr>
               </thead>
               <tbody>

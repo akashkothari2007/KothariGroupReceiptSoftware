@@ -135,3 +135,63 @@ def delete_company(company_id: str):
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Company not found")
     return {"deleted": True}
+
+
+# ── Expense Types ──
+
+@router.get("/expense-types")
+def list_expense_types():
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT id, name FROM expense_types ORDER BY name")
+        ).fetchall()
+    return [{"id": str(r[0]), "name": r[1]} for r in rows]
+
+
+class ExpenseTypeCreate(BaseModel):
+    name: str
+
+
+class ExpenseTypeUpdate(BaseModel):
+    name: Optional[str] = None
+
+
+@router.post("/expense-types")
+def create_expense_type(body: ExpenseTypeCreate):
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("INSERT INTO expense_types (name) VALUES (:name) RETURNING id, name"),
+            {"name": body.name.strip()},
+        ).fetchone()
+    return {"id": str(row[0]), "name": row[1]}
+
+
+@router.patch("/expense-types/{expense_type_id}")
+def update_expense_type(expense_type_id: str, body: ExpenseTypeUpdate):
+    if not body.name:
+        return {"updated": False}
+
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("UPDATE expense_types SET name = :name WHERE id = :eid"),
+            {"name": body.name.strip(), "eid": expense_type_id},
+        )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Expense type not found")
+    return {"updated": True}
+
+
+@router.delete("/expense-types/{expense_type_id}")
+def delete_expense_type(expense_type_id: str):
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE transactions SET expense_type_id = NULL WHERE expense_type_id = :eid"),
+            {"eid": expense_type_id},
+        )
+        result = conn.execute(
+            text("DELETE FROM expense_types WHERE id = :eid"),
+            {"eid": expense_type_id},
+        )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Expense type not found")
+    return {"deleted": True}

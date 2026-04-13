@@ -202,7 +202,7 @@ def get_transactions(statement_id: str):
                 SELECT t.id, t.transaction_date, t.merchant, t.description,
                        t.amount_cad, t.foreign_amount, t.foreign_currency,
                        t.tax_amount,
-                       t.company_id, t.gl_code_id,
+                       t.company_id, t.gl_code_id, t.expense_type_id,
                        t.match_status, t.matched_receipt_id,
                        r.file_name as receipt_file_name,
                        r.merchant_name as receipt_merchant,
@@ -226,11 +226,12 @@ def get_transactions(statement_id: str):
             "tax_amount": float(r[7]) if r[7] is not None else None,
             "company_id": str(r[8]) if r[8] else None,
             "gl_code_id": str(r[9]) if r[9] else None,
-            "match_status": r[10],
-            "matched_receipt_id": str(r[11]) if r[11] else None,
-            "receipt_file_name": r[12],
-            "receipt_merchant": r[13],
-            "receipt_file_type": r[14],
+            "expense_type_id": str(r[10]) if r[10] else None,
+            "match_status": r[11],
+            "matched_receipt_id": str(r[12]) if r[12] else None,
+            "receipt_file_name": r[13],
+            "receipt_merchant": r[14],
+            "receipt_file_type": r[15],
         }
         for r in rows
     ]

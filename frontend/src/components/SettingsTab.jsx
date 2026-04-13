@@ -124,7 +124,7 @@ function SettingsTable({ title, items, fields, onCreate, onUpdate, onDelete }) {
   )
 }
 
-export function SettingsTab({ companies, glCodes, onRefresh }) {
+export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
   const handleCreateCompany = async (values) => {
     try {
       await authFetch(`${API}/lookups/companies`, {
@@ -185,6 +185,36 @@ export function SettingsTab({ companies, glCodes, onRefresh }) {
     } catch {}
   }
 
+  const handleCreateExpenseType = async (values) => {
+    try {
+      await authFetch(`${API}/lookups/expense-types`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: values.name }),
+      })
+      onRefresh()
+    } catch {}
+  }
+
+  const handleUpdateExpenseType = async (id, values) => {
+    try {
+      await authFetch(`${API}/lookups/expense-types/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: values.name }),
+      })
+      onRefresh()
+    } catch {}
+  }
+
+  const handleDeleteExpenseType = async (id) => {
+    if (!confirm('Delete this expense type? Transactions using it will become unassigned.')) return
+    try {
+      await authFetch(`${API}/lookups/expense-types/${id}`, { method: 'DELETE' })
+      onRefresh()
+    } catch {}
+  }
+
   return (
     <div className="settings-tab">
       <SettingsTable
@@ -208,6 +238,17 @@ export function SettingsTab({ companies, glCodes, onRefresh }) {
         onCreate={handleCreateGlCode}
         onUpdate={handleUpdateGlCode}
         onDelete={handleDeleteGlCode}
+      />
+
+      <SettingsTable
+        title="Type of Expense"
+        items={expenseTypes}
+        fields={[
+          { key: 'name', label: 'Expense Type', placeholder: 'e.g. Travel', required: true },
+        ]}
+        onCreate={handleCreateExpenseType}
+        onUpdate={handleUpdateExpenseType}
+        onDelete={handleDeleteExpenseType}
       />
     </div>
   )

@@ -6,7 +6,7 @@ import { formatMoney, formatUploadDate } from '../utils/formatters'
 export function StatementsTab({
   statements, currentIndex, currentStatement,
   setCurrentId, uploading, setUploading, deleteConfirm, setDeleteConfirm,
-  transactions, loadingTx, glCodes, companies, receipts,
+  transactions, loadingTx, glCodes, companies, expenseTypes, receipts,
   fetchStatements, fetchTransactions, currentId,
   updateTransaction, handleManualMatch, handleUnmatch, handleConfirmMatch,
   showReceiptPreview, receiptPreviewTxId, receiptPreviewUrl, receiptPreviewLoading,
@@ -82,9 +82,10 @@ export function StatementsTab({
                 <th>Merchant</th>
                 <th>Description</th>
                 <th className="amount-col">Amount</th>
-                <th className="amount-col">Tax</th>
+                <th className="amount-col">Tax (HST/GST)</th>
                 <th>Company</th>
                 <th>GL Code</th>
+                <th>Type of Expense</th>
                 <th>Receipt</th>
               </tr>
             </thead>
@@ -92,7 +93,7 @@ export function StatementsTab({
               {loadingTx ? (
                 <ShimmerRows />
               ) : transactions.length === 0 ? (
-                <tr><td colSpan={8} className="empty-cell">No transactions in this statement.</td></tr>
+                <tr><td colSpan={9} className="empty-cell">No transactions in this statement.</td></tr>
               ) : (
                 transactions.map(tx => (
                   <TransactionRow
@@ -100,6 +101,7 @@ export function StatementsTab({
                     tx={tx}
                     companies={companies}
                     glCodes={glCodes}
+                    expenseTypes={expenseTypes}
                     receipts={receipts}
                     updateTransaction={updateTransaction}
                     handleManualMatch={handleManualMatch}

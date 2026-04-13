@@ -126,7 +126,6 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
                 <option value="">—</option>
                 <option value="HST">HST</option>
                 <option value="GST">GST</option>
-                <option value="GST+PST">GST+PST</option>
                 <option value="none">None</option>
               </select>
             </div>

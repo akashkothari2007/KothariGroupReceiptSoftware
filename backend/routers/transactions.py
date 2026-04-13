@@ -19,13 +19,14 @@ class TransactionUpdate(BaseModel):
     tax_amount: Optional[float] = None
     company_id: Optional[str] = None
     gl_code_id: Optional[str] = None
+    expense_type_id: Optional[str] = None
     notes: Optional[str] = None
     match_status: Optional[str] = None
 
 
 ALLOWED_FIELDS = {
     "merchant", "description", "amount_cad", "city", "province",
-    "country", "tax_amount", "company_id", "gl_code_id", "notes",
+    "country", "tax_amount", "company_id", "gl_code_id", "expense_type_id", "notes",
     "match_status",
 }
 

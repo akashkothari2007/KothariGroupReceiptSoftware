@@ -1,7 +1,7 @@
 import { formatDate, formatMoney } from '../utils/formatters'
 
 export function TransactionRow({
-  tx, companies, glCodes, receipts,
+  tx, companies, glCodes, expenseTypes, receipts,
   updateTransaction, handleManualMatch, handleUnmatch, handleConfirmMatch,
   showReceiptPreview, receiptPreviewTxId, receiptPreviewUrl, receiptPreviewLoading,
   setReceiptPreviewTxId, linkingTxId, setLinkingTxId,
@@ -67,6 +67,18 @@ export function TransactionRow({
           <option value="">—</option>
           {glCodes.map(g => (
             <option key={g.id} value={g.id}>{g.code} — {g.name}</option>
+          ))}
+        </select>
+      </td>
+      <td>
+        <select
+          value={tx.expense_type_id || ''}
+          onChange={e => updateTransaction(tx.id, 'expense_type_id', e.target.value, true)}
+          className="cell-select"
+        >
+          <option value="">—</option>
+          {expenseTypes.map(et => (
+            <option key={et.id} value={et.id}>{et.name}</option>
           ))}
         </select>
       </td>
