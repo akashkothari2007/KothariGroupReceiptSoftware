@@ -24,10 +24,13 @@ DATE RULES:
 - For hotel receipts: use the check-out or billing date, NOT the reservation date
 - receipt_date must be YYYY-MM-DD format or null
 
-AMOUNT RULES:
-- Extract the total for THIS specific charge only
+AMOUNT RULES — THIS IS CRITICAL:
+- total_amount MUST be the FINAL amount charged to the credit card, INCLUDING tip
+- If the receipt shows a "CREDIT CARD SALE", "Amount Charged", "Total Charged", or similar final line — USE THAT as total_amount, NOT the pre-tip "Total"
+- Example: Subtotal $31.47, Tax $4.09, Total $35.56, Tip $5.33, CREDIT CARD SALE $40.89 → total_amount = 40.89 (NOT 35.56)
+- The amount that hits the credit card statement is what matters — this always includes tip
+- subtotal should be the pre-tax amount. tax_amount is the tax. total_amount is the FINAL charge including everything (tax + tip + any other additions)
 - If a receipt shows charges split among multiple people (e.g. "4 tickets × $50 = $200, your share: $50"), extract the individual share, not the group total
-- For itemized receipts, extract the final total (after tax) that was actually charged
 - total_amount should be positive even for refunds — use the is_refund field instead
 
 REFUND RULES:
@@ -46,10 +49,9 @@ COUNTRY RULES:
 - Canadian cities, provinces, or $ amounts alone are NOT evidence of being foreign — Canada uses $ too
 - If the receipt is clearly foreign (not Canadian), set tax_amount to 0 and tax_type to "none"
 
-  If the document contains multiple receipts, extract only the 
-  FINAL or MOST COMPLETE receipt (the one with the highest total, 
-  typically the version that includes tip). Return a single JSON 
-  object, never an array.
+MULTIPLE RECEIPTS:
+- If the document contains multiple receipts (e.g. a customer copy and merchant copy), extract only the FINAL or MOST COMPLETE version — the one showing the highest total (typically includes tip). Return a single JSON object, never an array.
+
 - Return ONLY the JSON object, no markdown, no explanation
 """
 
