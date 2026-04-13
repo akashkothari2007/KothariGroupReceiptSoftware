@@ -9,6 +9,7 @@ from sqlalchemy import text
 from db import engine
 from middleware.auth import get_current_user
 from services.match_run import run_matching_for_statement
+from services.rules import apply_rules_batch
 
 logger = logging.getLogger("statements")
 
@@ -314,6 +315,15 @@ async def upload_statement(file: UploadFile = File(...), card_account_id: str = 
 
     def _bg_match():
         try:
+            # Apply rules (vendor→GL, city→company) before matching
+            with engine.connect() as conn:
+                tx_ids = conn.execute(
+                    text("SELECT id FROM transactions WHERE statement_id = :sid"),
+                    {"sid": sid},
+                ).fetchall()
+            if tx_ids:
+                apply_rules_batch([str(r[0]) for r in tx_ids])
+
             matches = run_matching_for_statement(sid)
             logger.info(f"Statement {sid}: auto-matched {len(matches)} transactions")
             matching_status[sid] = "done"

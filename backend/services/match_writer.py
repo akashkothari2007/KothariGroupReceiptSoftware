@@ -95,9 +95,9 @@ def apply_match(transaction_id: str, receipt_id: str, match_status: str, match_m
         location_sets = ""
         location_params = {}
         if receipt_city:
-            location_sets += ", city = :r_city"
+            location_sets += ", city = :r_city, company_id = NULL"
             location_params["r_city"] = receipt_city
-            logger.info(f"  Overriding tx city → {receipt_city}")
+            logger.info(f"  Overriding tx city → {receipt_city} (clearing company_id for re-evaluation)")
         if receipt_province:
             location_sets += ", province = :r_province"
             location_params["r_province"] = receipt_province
@@ -142,6 +142,14 @@ def apply_match(transaction_id: str, receipt_id: str, match_status: str, match_m
         )
 
     logger.info(f"Match applied: tx={transaction_id} ↔ receipt={receipt_id} (tax=${tx_tax:.2f})")
+
+    # Re-run rules since receipt may have updated city/province/country
+    try:
+        from services.rules import apply_rules
+        apply_rules(transaction_id)
+    except Exception as e:
+        logger.error(f"Rules failed for tx={transaction_id}: {e}", exc_info=True)
+
     return True
 
 

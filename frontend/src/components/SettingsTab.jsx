@@ -1,5 +1,30 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { API, authFetch } from '../utils/api'
+
+function FieldInput({ field, value, onChange }) {
+  if (field.type === 'select') {
+    return (
+      <select
+        className="settings-input"
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+      >
+        <option value="">— Select —</option>
+        {(field.options || []).map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    )
+  }
+  return (
+    <input
+      className="settings-input"
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
+      placeholder={field.placeholder}
+    />
+  )
+}
 
 function EditableRow({ item, fields, onSave, onDelete }) {
   const [editing, setEditing] = useState(false)
@@ -23,14 +48,13 @@ function EditableRow({ item, fields, onSave, onDelete }) {
       {fields.map(f => (
         <td key={f.key}>
           {editing ? (
-            <input
-              className="settings-input"
-              value={values[f.key] || ''}
-              onChange={e => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-              placeholder={f.placeholder}
+            <FieldInput
+              field={f}
+              value={values[f.key]}
+              onChange={v => setValues(prev => ({ ...prev, [f.key]: v }))}
             />
           ) : (
-            <span className="settings-value">{item[f.key] || '—'}</span>
+            <span className="settings-value">{f.displayFn ? f.displayFn(item) : f.displayKey ? item[f.displayKey] : item[f.key] || '—'}</span>
           )}
         </td>
       ))}
@@ -72,11 +96,10 @@ function AddRow({ fields, onAdd }) {
     <tr className="settings-add-row">
       {fields.map(f => (
         <td key={f.key}>
-          <input
-            className="settings-input"
+          <FieldInput
+            field={f}
             value={values[f.key]}
-            onChange={e => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-            placeholder={f.placeholder}
+            onChange={v => setValues(prev => ({ ...prev, [f.key]: v }))}
           />
         </td>
       ))}
@@ -125,6 +148,27 @@ function SettingsTable({ title, items, fields, onCreate, onUpdate, onDelete }) {
 }
 
 export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
+  const [vendorMappings, setVendorMappings] = useState([])
+  const [cityRules, setCityRules] = useState([])
+
+  useEffect(() => {
+    fetchVendorMappings()
+    fetchCityRules()
+  }, [])
+
+  const fetchVendorMappings = async () => {
+    try {
+      const res = await authFetch(`${API}/lookups/vendor-mappings`)
+      setVendorMappings(await res.json())
+    } catch {}
+  }
+
+  const fetchCityRules = async () => {
+    try {
+      const res = await authFetch(`${API}/lookups/city-company-rules`)
+      setCityRules(await res.json())
+    } catch {}
+  }
   const handleCreateCompany = async (values) => {
     try {
       await authFetch(`${API}/lookups/companies`, {
@@ -215,6 +259,71 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
     } catch {}
   }
 
+  // ── Vendor Mappings ──
+  const handleCreateVendorMapping = async (values) => {
+    try {
+      await authFetch(`${API}/lookups/vendor-mappings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendor_name: values.vendor_name, gl_code_id: values.gl_code_id }),
+      })
+      fetchVendorMappings()
+    } catch {}
+  }
+
+  const handleUpdateVendorMapping = async (id, values) => {
+    try {
+      await authFetch(`${API}/lookups/vendor-mappings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendor_name: values.vendor_name, gl_code_id: values.gl_code_id }),
+      })
+      fetchVendorMappings()
+    } catch {}
+  }
+
+  const handleDeleteVendorMapping = async (id) => {
+    if (!confirm('Delete this vendor mapping?')) return
+    try {
+      await authFetch(`${API}/lookups/vendor-mappings/${id}`, { method: 'DELETE' })
+      fetchVendorMappings()
+    } catch {}
+  }
+
+  // ── City-Company Rules ──
+  const handleCreateCityRule = async (values) => {
+    try {
+      await authFetch(`${API}/lookups/city-company-rules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: values.city, province: values.province || null, company_id: values.company_id }),
+      })
+      fetchCityRules()
+    } catch {}
+  }
+
+  const handleUpdateCityRule = async (id, values) => {
+    try {
+      await authFetch(`${API}/lookups/city-company-rules/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: values.city, province: values.province || null, company_id: values.company_id }),
+      })
+      fetchCityRules()
+    } catch {}
+  }
+
+  const handleDeleteCityRule = async (id) => {
+    if (!confirm('Delete this city-company rule?')) return
+    try {
+      await authFetch(`${API}/lookups/city-company-rules/${id}`, { method: 'DELETE' })
+      fetchCityRules()
+    } catch {}
+  }
+
+  const glCodeOptions = glCodes.map(g => ({ value: g.id, label: `${g.code} — ${g.name}` }))
+  const companyOptions = companies.map(c => ({ value: c.id, label: c.name }))
+
   return (
     <div className="settings-tab">
       <SettingsTable
@@ -249,6 +358,31 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
         onCreate={handleCreateExpenseType}
         onUpdate={handleUpdateExpenseType}
         onDelete={handleDeleteExpenseType}
+      />
+
+      <SettingsTable
+        title="Vendor → GL Code Rules"
+        items={vendorMappings}
+        fields={[
+          { key: 'vendor_name', label: 'Vendor Keyword', placeholder: 'e.g. uber, aircanada', required: true },
+          { key: 'gl_code_id', label: 'GL Code', type: 'select', options: glCodeOptions, displayFn: (item) => item.gl_code ? `${item.gl_code} — ${item.gl_name}` : '—', required: true },
+        ]}
+        onCreate={handleCreateVendorMapping}
+        onUpdate={handleUpdateVendorMapping}
+        onDelete={handleDeleteVendorMapping}
+      />
+
+      <SettingsTable
+        title="City → Company Rules"
+        items={cityRules}
+        fields={[
+          { key: 'city', label: 'City', placeholder: 'e.g. Toronto', required: true },
+          { key: 'province', label: 'Province', placeholder: 'e.g. ON (optional)' },
+          { key: 'company_id', label: 'Company', type: 'select', options: companyOptions, displayKey: 'company_name', required: true },
+        ]}
+        onCreate={handleCreateCityRule}
+        onUpdate={handleUpdateCityRule}
+        onDelete={handleDeleteCityRule}
       />
     </div>
   )
