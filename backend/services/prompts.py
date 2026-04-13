@@ -46,6 +46,10 @@ COUNTRY RULES:
 - Canadian cities, provinces, or $ amounts alone are NOT evidence of being foreign — Canada uses $ too
 - If the receipt is clearly foreign (not Canadian), set tax_amount to 0 and tax_type to "none"
 
+  If the document contains multiple receipts, extract only the 
+  FINAL or MOST COMPLETE receipt (the one with the highest total, 
+  typically the version that includes tip). Return a single JSON 
+  object, never an array.
 - Return ONLY the JSON object, no markdown, no explanation
 """
 
