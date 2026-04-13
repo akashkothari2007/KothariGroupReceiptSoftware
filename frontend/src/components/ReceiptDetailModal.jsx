@@ -21,6 +21,8 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
       tax_amount: receipt.tax_amount != null ? String(receipt.tax_amount) : '',
       tax_type: receipt.tax_type || '',
       total_amount: receipt.total_amount != null ? String(receipt.total_amount) : '',
+      city: receipt.city || '',
+      province: receipt.province || '',
       country: receipt.country || '',
     })
     setLoadingUrl(true)
@@ -132,6 +134,14 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
             <div className="meta-row">
               <span className="meta-label">Total amount</span>
               <input className="meta-input meta-input-num" value={fields.total_amount} onChange={e => handleChange('total_amount', e.target.value)} placeholder="—" />
+            </div>
+            <div className="meta-row">
+              <span className="meta-label">City</span>
+              <input className="meta-input" value={fields.city} onChange={e => handleChange('city', e.target.value)} placeholder="—" style={{ maxWidth: 140 }} />
+            </div>
+            <div className="meta-row">
+              <span className="meta-label">Province</span>
+              <input className="meta-input" value={fields.province} onChange={e => handleChange('province', e.target.value)} placeholder="—" style={{ maxWidth: 80 }} />
             </div>
             <div className="meta-row">
               <span className="meta-label">Country</span>

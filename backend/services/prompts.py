@@ -48,7 +48,7 @@ TAX RULES:
 LOCATION RULES:
 - city: extract the city where the business is located from the receipt address. Use proper case (e.g. "Toronto", "North York", "Mississauga"). null if not found.
 - province: extract the province/state code (e.g. "ON", "BC", "AB", "NY", "CA"). null if not found.
-- For airlines/flights: use the city from the merchant's billing address, NOT the flight destination.
+- For airlines/flights: use the DEPARTURE city (where you are flying FROM), NOT the destination or the airline's billing address.
 - country: DEFAULT TO "CA" (Canada). Only use a different country code if there is CLEAR evidence the business is foreign.
 - Evidence of foreign: US/foreign address, USD currency explicitly stated, non-Canadian phone format, foreign tax (e.g. "Sales Tax" with US state)
 - Canadian cities, provinces, or $ amounts alone are NOT evidence of being foreign — Canada uses $ too
