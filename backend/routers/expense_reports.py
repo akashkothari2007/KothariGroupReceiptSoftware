@@ -9,7 +9,7 @@ from sqlalchemy import text
 from supabase import create_client
 from db import engine
 from middleware.auth import get_current_user
-from services.expense_report_handler import generate_pdf, add_watermark
+from services.expense_report_handler import generate_pdf, add_watermark, append_receipts
 
 logger = logging.getLogger("expense_reports")
 
@@ -25,14 +25,16 @@ STORAGE_PREFIX = "expense-reports"
 
 
 def _fetch_transactions(conn, statement_id: str, company_id: str):
-    """Shared query for fetching transactions + GL code display."""
+    """Shared query for fetching transactions + GL code display + receipt info."""
     rows = conn.execute(
         text("""
             SELECT t.transaction_date, t.merchant, t.description,
                    t.amount_cad, t.tax_amount,
-                   g.code, g.name
+                   g.code, g.name,
+                   t.matched_receipt_id, r.image_url, r.file_type
             FROM transactions t
             LEFT JOIN gl_codes g ON g.id = t.gl_code_id
+            LEFT JOIN receipts r ON r.id = t.matched_receipt_id
             WHERE t.statement_id = :sid AND t.company_id = :cid
             ORDER BY t.transaction_date, t.merchant
         """),
@@ -54,6 +56,8 @@ def _fetch_transactions(conn, statement_id: str, company_id: str):
             "amount_cad": float(r[3]) if r[3] is not None else 0,
             "tax_amount": float(r[4]) if r[4] is not None else 0,
             "gl_code": gl_display,
+            "receipt_storage_path": r[8],
+            "receipt_file_type": r[9],
         })
     return transactions
 
@@ -137,6 +141,27 @@ def finalize_report(
         created_by=created_by,
         created_at=now,
     )
+
+    # Fetch receipt files and append to PDF
+    receipt_files = []
+    for tx in sorted(transactions, key=lambda t: t.get("transaction_date") or ""):
+        path = tx.get("receipt_storage_path")
+        if not path:
+            continue
+        try:
+            file_bytes = _supabase.storage.from_(BUCKET).download(path)
+            receipt_files.append({
+                "merchant": tx.get("merchant") or "Unknown",
+                "date": tx.get("transaction_date") or "",
+                "file_bytes": file_bytes,
+                "file_type": tx.get("receipt_file_type") or "image/jpeg",
+            })
+        except Exception as e:
+            logger.warning(f"Failed to download receipt {path}: {e}")
+
+    if receipt_files:
+        pdf_bytes = append_receipts(pdf_bytes, receipt_files)
+        logger.info(f"Appended {len(receipt_files)} receipts to report PDF")
 
     storage_path = f"{STORAGE_PREFIX}/{uuid.uuid4()}.pdf"
     _supabase.storage.from_(BUCKET).upload(storage_path, pdf_bytes, {"content-type": "application/pdf"})

@@ -261,6 +261,174 @@ def generate_pdf(
     return buf.getvalue()
 
 
+def append_receipts(report_pdf_bytes: bytes, receipt_files: list[dict]) -> bytes:
+    """Append receipt images/PDFs to the end of the report PDF.
+
+    Each entry in receipt_files: {merchant, date, file_bytes, file_type}
+    """
+    report = fitz.open(stream=report_pdf_bytes, filetype="pdf")
+    page_w, page_h = letter  # 612 x 792
+
+    for receipt in receipt_files:
+        file_bytes = receipt["file_bytes"]
+        file_type = (receipt.get("file_type") or "").lower()
+        merchant = receipt.get("merchant") or "Unknown"
+        date = receipt.get("date") or ""
+
+        header_text = f"Receipt — {merchant}"
+        if date:
+            header_text += f"  ({date})"
+
+        if file_type in ("text/html", "html"):
+            # Email body receipt — render key info as a text page
+            _append_html_receipt_page(report, receipt, header_text, page_w, page_h)
+        elif file_type in ("application/pdf", "pdf"):
+            # PDF receipt — merge pages directly
+            try:
+                receipt_doc = fitz.open(stream=file_bytes, filetype="pdf")
+                for i in range(len(receipt_doc)):
+                    report.insert_pdf(receipt_doc, from_page=i, to_page=i)
+                    # Add header to the inserted page
+                    inserted_page = report[-1]
+                    inserted_page.insert_text(
+                        fitz.Point(36, 24),
+                        header_text,
+                        fontname="helv",
+                        fontsize=9,
+                        color=(0.4, 0.4, 0.4),
+                    )
+                receipt_doc.close()
+            except Exception:
+                # If PDF is corrupt, try as image fallback
+                _append_image_page(report, file_bytes, header_text, page_w, page_h)
+        else:
+            # Image receipt (jpg, png, heic, etc.)
+            _append_image_page(report, file_bytes, header_text, page_w, page_h)
+
+    out = io.BytesIO()
+    report.save(out)
+    report.close()
+    return out.getvalue()
+
+
+def _append_image_page(doc, image_bytes: bytes, header_text: str, page_w: float, page_h: float):
+    """Add a new page with the receipt image scaled to fit."""
+    page = doc.new_page(width=page_w, height=page_h)
+
+    # Header
+    page.insert_text(
+        fitz.Point(36, 24),
+        header_text,
+        fontname="helv",
+        fontsize=9,
+        color=(0.4, 0.4, 0.4),
+    )
+
+    # Image area with margins (36pt sides, 40pt top for header, 36pt bottom)
+    margin = 36
+    top_margin = 40
+    img_area_w = page_w - 2 * margin
+    img_area_h = page_h - top_margin - margin
+
+    try:
+        img = fitz.open(stream=image_bytes, filetype="png")
+        if img.page_count == 0:
+            # Try as jpeg
+            img.close()
+            img = fitz.open(stream=image_bytes, filetype="jpeg")
+
+        pdfbytes = img.convert_to_pdf()
+        img.close()
+        img_pdf = fitz.open(stream=pdfbytes, filetype="pdf")
+        img_page = img_pdf[0]
+
+        # Get image dimensions and scale to fit
+        img_w = img_page.rect.width
+        img_h = img_page.rect.height
+
+        scale_x = img_area_w / img_w
+        scale_y = img_area_h / img_h
+        scale = min(scale_x, scale_y, 1.0)  # don't upscale
+
+        final_w = img_w * scale
+        final_h = img_h * scale
+
+        # Center horizontally, top-align below header
+        x = margin + (img_area_w - final_w) / 2
+        y = top_margin
+
+        rect = fitz.Rect(x, y, x + final_w, y + final_h)
+        page.show_pdf_page(rect, img_pdf, 0)
+        img_pdf.close()
+    except Exception:
+        page.insert_text(
+            fitz.Point(margin, top_margin + 20),
+            "[Receipt image could not be loaded]",
+            fontname="helv",
+            fontsize=11,
+            color=(0.7, 0.2, 0.2),
+        )
+
+
+def _append_html_receipt_page(doc, receipt: dict, header_text: str, page_w: float, page_h: float):
+    """For email body receipts stored as HTML — strip tags and render the text content."""
+    import re as _re
+
+    page = doc.new_page(width=page_w, height=page_h)
+
+    page.insert_text(
+        fitz.Point(36, 24),
+        header_text,
+        fontname="helv",
+        fontsize=9,
+        color=(0.4, 0.4, 0.4),
+    )
+
+    # Strip HTML to plain text
+    html = receipt.get("file_bytes", b"")
+    if isinstance(html, bytes):
+        html = html.decode("utf-8", errors="replace")
+    text_content = _re.sub(r"<[^>]+>", " ", html)
+    text_content = _re.sub(r"\s+", " ", text_content).strip()
+
+    # Truncate if too long
+    if len(text_content) > 3000:
+        text_content = text_content[:3000] + "..."
+
+    # Wrap text into lines that fit the page
+    margin = 36
+    y = 50
+    max_width = page_w - 2 * margin
+    font_size = 9
+    line_height = 13
+
+    words = text_content.split()
+    line = ""
+    for word in words:
+        test = f"{line} {word}".strip()
+        tw = fitz.get_text_length(test, fontname="helv", fontsize=font_size)
+        if tw > max_width and line:
+            page.insert_text(
+                fitz.Point(margin, y),
+                line,
+                fontname="helv",
+                fontsize=font_size,
+            )
+            y += line_height
+            line = word
+            if y > page_h - margin:
+                break
+        else:
+            line = test
+    if line and y <= page_h - margin:
+        page.insert_text(
+            fitz.Point(margin, y),
+            line,
+            fontname="helv",
+            fontsize=font_size,
+        )
+
+
 def add_watermark(pdf_bytes: bytes, text: str = "PENDING APPROVAL") -> bytes:
     """Overlay a faded diagonal watermark on every page of an existing PDF."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
