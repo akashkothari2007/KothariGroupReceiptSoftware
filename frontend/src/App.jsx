@@ -19,6 +19,8 @@ function App() {
   const [glCodes, setGlCodes] = useState([])
   const [companies, setCompanies] = useState([])
   const [expenseTypes, setExpenseTypes] = useState([])
+  const [cardAccounts, setCardAccounts] = useState([])
+  const [selectedAccountId, setSelectedAccountId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [loadingStatements, setLoadingStatements] = useState(true)
@@ -45,13 +47,15 @@ function App() {
   const currentStatement = currentIndex >= 0 ? statements[currentIndex] : null
 
   // ── Statements data ──
-  const fetchStatements = useCallback(async () => {
-    const res = await authFetch(`${API}/statements`)
+  const fetchStatements = useCallback(async (accountId) => {
+    const aid = accountId || selectedAccountId
+    const url = aid ? `${API}/statements?card_account_id=${aid}` : `${API}/statements`
+    const res = await authFetch(url)
     const data = await res.json()
     setStatements(data)
     setLoadingStatements(false)
     return data
-  }, [])
+  }, [selectedAccountId])
 
   const fetchTransactions = useCallback(async (statementId, silent = false) => {
     if (!silent) { setLoadingTx(true); setTransactions([]) }
@@ -61,18 +65,41 @@ function App() {
     if (!silent) setLoadingTx(false)
   }, [])
 
+  const fetchCardAccounts = useCallback(async () => {
+    const res = await authFetch(`${API}/lookups/card-accounts`)
+    const data = await res.json()
+    setCardAccounts(data)
+    return data
+  }, [])
+
   const refreshLookups = useCallback(() => {
     authFetch(`${API}/lookups/gl-codes`).then(r => r.json()).then(setGlCodes)
     authFetch(`${API}/lookups/companies`).then(r => r.json()).then(setCompanies)
     authFetch(`${API}/lookups/expense-types`).then(r => r.json()).then(setExpenseTypes)
-  }, [])
+    fetchCardAccounts()
+  }, [fetchCardAccounts])
 
   useEffect(() => {
-    fetchStatements().then(data => {
-      if (data.length > 0) setCurrentId(data[0].id)
+    fetchCardAccounts().then(accounts => {
+      if (accounts.length > 0) {
+        setSelectedAccountId(accounts[0].id)
+      }
     })
-    refreshLookups()
-  }, [fetchStatements, refreshLookups])
+    authFetch(`${API}/lookups/gl-codes`).then(r => r.json()).then(setGlCodes)
+    authFetch(`${API}/lookups/companies`).then(r => r.json()).then(setCompanies)
+    authFetch(`${API}/lookups/expense-types`).then(r => r.json()).then(setExpenseTypes)
+  }, [fetchCardAccounts])
+
+  // Fetch statements when selected account changes
+  useEffect(() => {
+    if (selectedAccountId) {
+      setCurrentId(null)
+      setTransactions([])
+      fetchStatements(selectedAccountId).then(data => {
+        if (data.length > 0) setCurrentId(data[0].id)
+      })
+    }
+  }, [selectedAccountId, fetchStatements])
 
   useEffect(() => {
     if (currentId) {
@@ -132,13 +159,17 @@ function App() {
   const handleUpload = async (e) => {
     const file = e.target.files[0]
     if (!file) return
+    if (!selectedAccountId) {
+      alert('Please select a card account first.')
+      return
+    }
     setUploading(true)
     const form = new FormData()
     form.append('file', file)
     try {
-      const res = await authFetch(`${API}/statements/upload`, { method: 'POST', body: form })
+      const res = await authFetch(`${API}/statements/upload?card_account_id=${selectedAccountId}`, { method: 'POST', body: form })
       const data = await res.json()
-      await fetchStatements()
+      await fetchStatements(selectedAccountId)
       setCurrentId(data.statement_id)
     } catch (err) {
       alert('Upload failed: ' + err.message)
@@ -440,6 +471,10 @@ function App() {
           handleUpload={handleUpload}
           handleDelete={handleDelete}
           fileRef={fileRef}
+          cardAccounts={cardAccounts}
+          selectedAccountId={selectedAccountId}
+          setSelectedAccountId={setSelectedAccountId}
+          fetchCardAccounts={fetchCardAccounts}
         />
       )}
 

@@ -1,9 +1,10 @@
 import csv
 import io
 import logging
+import re
 import threading
 from datetime import datetime
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File, Query
 from sqlalchemy import text
 from db import engine
 from middleware.auth import get_current_user
@@ -16,19 +17,35 @@ router = APIRouter(prefix="/statements", tags=["statements"], dependencies=[Depe
 matching_status: dict[str, str] = {}
 
 
-def parse_date(date_str: str):
+# ── Shared helpers ──
+
+def parse_amount(amount_str: str):
+    if not amount_str or not amount_str.strip():
+        return None
+    cleaned = amount_str.strip().replace(',', '')
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def normalize_country(val: str):
+    if not val:
+        return None
+    val = val.strip().upper()
+    mapping = {"CANADA": "CA", "UNITED STATES": "US"}
+    return mapping.get(val, val)
+
+
+# ── Amex helpers ──
+
+def parse_date_amex(date_str: str):
     if not date_str or not date_str.strip():
         return None
     return datetime.strptime(date_str.strip(), "%d %b %Y").date()
 
 
-def parse_amount(amount_str: str):
-    if not amount_str or not amount_str.strip():
-        return None
-    return float(amount_str.strip())
-
-
-def parse_foreign_amount(val: str):
+def parse_foreign_amount_amex(val: str):
     """Parse '500.00 USD' or '228.000,00 TRY' or '2,295.00 USD' -> (float, currency)."""
     if not val or not val.strip():
         return None, None
@@ -55,27 +72,159 @@ def parse_city_province(val: str):
     return lines[0], None
 
 
-def normalize_country(val: str):
-    if not val:
+# ── Mastercard helpers ──
+
+def parse_date_mc(date_str: str):
+    """Parse 'M/DD/YYYY' or 'MM/DD/YYYY' -> date."""
+    if not date_str or not date_str.strip():
         return None
-    val = val.strip().upper()
-    mapping = {"CANADA": "CA", "UNITED STATES": "US"}
-    return mapping.get(val, val)
+    try:
+        return datetime.strptime(date_str.strip(), "%m/%d/%Y").date()
+    except ValueError:
+        return None
+
+
+def parse_mc_foreign(desc2: str):
+    """Parse '176.4 USD @ 1.404535' -> (foreign_amount, currency, exchange_rate)."""
+    if not desc2 or not desc2.strip():
+        return None, None, None
+    m = re.match(r'^([\d,.]+)\s+([A-Z]{3})\s+@\s+([\d,.]+)$', desc2.strip())
+    if m:
+        try:
+            amount = float(m.group(1).replace(',', ''))
+            currency = m.group(2)
+            rate = float(m.group(3).replace(',', ''))
+            return amount, currency, rate
+        except ValueError:
+            pass
+    return None, None, None
+
+
+# Known Canadian cities for better city extraction from MC descriptions
+MC_KNOWN_CITIES = {
+    "TORONTO", "MISSISSAUGA", "WINNIPEG", "VANCOUVER", "VICTORIA", "SIDNEY",
+    "MARKHAM", "ETOBICOKE", "BURNABY", "LEDUC", "SAANICHTON", "NORTH YORK",
+    "ST CATHARINES", "OTTAWA", "CALGARY", "EDMONTON", "MONTREAL", "HAMILTON",
+    "BRAMPTON", "SCARBOROUGH", "RICHMOND", "SURREY", "OAKVILLE", "KITCHENER",
+    "LONDON", "WATERLOO", "BARRIE", "GUELPH", "THUNDER BAY", "REGINA",
+    "SASKATOON", "HALIFAX", "FREDERICTON", "CHARLOTTETOWN", "WHITEHORSE",
+    "YELLOWKNIFE", "IQALUIT", "MIAMI", "NEW YORK", "LOS ANGELES", "CHICAGO",
+    "SAN FRANCISCO", "SEATTLE", "BOSTON", "LAS VEGAS", "ORLANDO",
+}
+
+
+def parse_mc_description(desc1: str):
+    """Extract merchant name and city from MC Description 1.
+    Format is typically 'MERCHANT_NAME CITY' where city is the last word(s)."""
+    if not desc1 or not desc1.strip():
+        return None, None
+    desc = desc1.strip()
+
+    # Try matching two-word cities first, then single-word
+    upper = desc.upper()
+    for city in MC_KNOWN_CITIES:
+        if upper.endswith(" " + city):
+            merchant = desc[:-(len(city))].strip().rstrip("-")
+            return merchant.strip() or desc, city.title()
+
+    # Fallback: last word is city
+    parts = desc.rsplit(" ", 1)
+    if len(parts) == 2 and len(parts[1]) >= 3:
+        return parts[0].strip().rstrip("-"), parts[1].title()
+
+    return desc, None
+
+
+# ── Format detection & parsing ──
+
+def detect_format(headers: list[str]) -> str:
+    """Detect CSV format from header row."""
+    normalized = [h.strip().lower() for h in headers]
+    if "account type" in normalized and "transaction date" in normalized:
+        return "mastercard"
+    return "amex"
+
+
+def parse_amex_rows(reader) -> list[dict]:
+    rows = []
+    for row in reader:
+        foreign_amount, foreign_currency = parse_foreign_amount_amex(
+            row.get("Foreign Spend Amount", "")
+        )
+        city, province = parse_city_province(row.get("City / Province", ""))
+        reference = row.get("Reference", "").strip().strip("'")
+
+        rows.append({
+            "transaction_date": parse_date_amex(row.get("Date", "")),
+            "merchant": (row.get("Merchant") or "").strip() or None,
+            "description": (row.get("Description") or "").strip() or None,
+            "amount_cad": parse_amount(row.get("Amount", "")),
+            "foreign_amount": foreign_amount,
+            "foreign_currency": foreign_currency,
+            "exchange_rate": parse_amount(row.get("Exchange Rate", "")),
+            "city": city,
+            "province": province,
+            "country": normalize_country(row.get("Country", "")),
+            "reference": reference or None,
+        })
+    return rows
+
+
+def parse_mastercard_rows(reader) -> list[dict]:
+    rows = []
+    for row in reader:
+        cad_raw = row.get("CAD$", "")
+        amount_cad = parse_amount(cad_raw)
+        if amount_cad is not None:
+            amount_cad = -amount_cad  # MC uses negative for charges, flip sign
+
+        desc1 = (row.get("Description 1") or "").strip()
+        desc2 = (row.get("Description 2") or "").strip()
+
+        merchant, city = parse_mc_description(desc1)
+        foreign_amount, foreign_currency, exchange_rate = parse_mc_foreign(desc2)
+
+        # Infer country from foreign currency or default to CA
+        country = "CA"
+        if foreign_currency:
+            country = "US" if foreign_currency == "USD" else foreign_currency[:2]
+
+        rows.append({
+            "transaction_date": parse_date_mc(row.get("Transaction Date", "")),
+            "merchant": merchant,
+            "description": desc1 or None,
+            "amount_cad": amount_cad,
+            "foreign_amount": foreign_amount,
+            "foreign_currency": foreign_currency,
+            "exchange_rate": exchange_rate,
+            "city": city,
+            "province": None,
+            "country": country,
+            "reference": None,
+        })
+    return rows
 
 
 @router.get("")
-def list_statements():
+def list_statements(card_account_id: str = Query(None)):
+    params = {}
+    where = ""
+    if card_account_id:
+        where = "WHERE s.card_account_id = :card_account_id"
+        params["card_account_id"] = card_account_id
     with engine.connect() as conn:
         rows = conn.execute(
-            text("""
+            text(f"""
                 SELECT s.id, s.filename, s.uploaded_at,
                        COUNT(t.id) as transaction_count,
                        COALESCE(SUM(t.amount_cad), 0) as total_amount
                 FROM statements s
                 LEFT JOIN transactions t ON t.statement_id = s.id
+                {where}
                 GROUP BY s.id
                 ORDER BY s.uploaded_at DESC
-            """)
+            """),
+            params,
         ).fetchall()
     return [
         {
@@ -91,33 +240,21 @@ def list_statements():
 
 
 @router.post("/upload")
-async def upload_statement(file: UploadFile = File(...)):
+async def upload_statement(file: UploadFile = File(...), card_account_id: str = Query(...)):
     contents = await file.read()
     text_content = contents.decode("utf-8-sig")
+
+    # Detect format from headers
+    sniffer = csv.DictReader(io.StringIO(text_content))
+    headers = sniffer.fieldnames or []
+    fmt = detect_format(headers)
+    logger.info(f"Detected CSV format: {fmt} (headers: {headers})")
+
     reader = csv.DictReader(io.StringIO(text_content))
-
-    rows = []
-    for row in reader:
-        foreign_amount, foreign_currency = parse_foreign_amount(
-            row.get("Foreign Spend Amount", "")
-        )
-        city, province = parse_city_province(row.get("City / Province", ""))
-        reference = row.get("Reference", "").strip().strip("'")
-
-        rows.append({
-            "transaction_date": parse_date(row.get("Date", "")),
-            "merchant": (row.get("Merchant") or "").strip() or None,
-            "description": (row.get("Description") or "").strip() or None,
-            "amount_cad": parse_amount(row.get("Amount", "")),
-            "foreign_amount": foreign_amount,
-            "foreign_currency": foreign_currency,
-            "exchange_rate": parse_amount(row.get("Exchange Rate", "")),
-            "city": city,
-            "province": province,
-            "country": normalize_country(row.get("Country", "")),
-            "reference": reference or None,
-            "card_member": (row.get("Card Member") or "").strip() or None,
-        })
+    if fmt == "mastercard":
+        rows = parse_mastercard_rows(reader)
+    else:
+        rows = parse_amex_rows(reader)
 
     valid_rows = []
     skipped = 0
@@ -146,11 +283,12 @@ async def upload_statement(file: UploadFile = File(...)):
     with engine.begin() as conn:
         result = conn.execute(
             text("""
-                INSERT INTO statements (filename, cycle_start, cycle_end)
-                VALUES (:filename, :cycle_start, :cycle_end)
+                INSERT INTO statements (filename, cycle_start, cycle_end, card_account_id)
+                VALUES (:filename, :cycle_start, :cycle_end, :card_account_id)
                 RETURNING id
             """),
-            {"filename": file.filename, "cycle_start": cycle_start, "cycle_end": cycle_end},
+            {"filename": file.filename, "cycle_start": cycle_start, "cycle_end": cycle_end,
+             "card_account_id": card_account_id},
         )
         statement_id = result.fetchone()[0]
 

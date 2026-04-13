@@ -1546,3 +1546,68 @@ tr:hover td { background: #f9fafb; }
   color: #9ca3af;
   font-size: 13px;
 }
+
+/* ── Card Account Selector ── */
+.card-account-bar {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.card-account-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-account-selector label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.card-account-selector select {
+  flex: 0 1 280px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #111827;
+}
+
+.btn-sm {
+  font-size: 12px !important;
+  padding: 5px 10px !important;
+}
+
+.new-account-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.new-account-form input,
+.new-account-form select {
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #111827;
+}
+
+.new-account-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.new-account-form select {
+  flex: 0 0 120px;
+}

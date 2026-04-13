@@ -195,3 +195,76 @@ def delete_expense_type(expense_type_id: str):
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Expense type not found")
     return {"deleted": True}
+
+
+# ── Card Accounts ──
+
+@router.get("/card-accounts")
+def list_card_accounts():
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT id, name, card_type, card_holder FROM card_accounts ORDER BY name")
+        ).fetchall()
+    return [{"id": str(r[0]), "name": r[1], "card_type": r[2], "card_holder": r[3]} for r in rows]
+
+
+class CardAccountCreate(BaseModel):
+    name: str
+    card_type: str
+    card_holder: Optional[str] = None
+
+
+class CardAccountUpdate(BaseModel):
+    name: Optional[str] = None
+    card_type: Optional[str] = None
+    card_holder: Optional[str] = None
+
+
+@router.post("/card-accounts")
+def create_card_account(body: CardAccountCreate):
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("""INSERT INTO card_accounts (name, card_type, card_holder)
+                    VALUES (:name, :card_type, :card_holder)
+                    RETURNING id, name, card_type, card_holder"""),
+            {"name": body.name.strip(), "card_type": body.card_type.strip(),
+             "card_holder": body.card_holder.strip() if body.card_holder else None},
+        ).fetchone()
+    return {"id": str(row[0]), "name": row[1], "card_type": row[2], "card_holder": row[3]}
+
+
+@router.patch("/card-accounts/{account_id}")
+def update_card_account(account_id: str, body: CardAccountUpdate):
+    fields = {}
+    for k, v in body.model_dump().items():
+        if v is not None:
+            fields[k] = v.strip() if isinstance(v, str) else v
+    if not fields:
+        return {"updated": False}
+
+    params = {"aid": account_id}
+    set_parts = []
+    for k, v in fields.items():
+        set_parts.append(f"{k} = :{k}")
+        params[k] = v
+
+    with engine.begin() as conn:
+        result = conn.execute(
+            text(f"UPDATE card_accounts SET {', '.join(set_parts)} WHERE id = :aid"),
+            params,
+        )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Card account not found")
+    return {"updated": True}
+
+
+@router.delete("/card-accounts/{account_id}")
+def delete_card_account(account_id: str):
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("DELETE FROM card_accounts WHERE id = :aid"),
+            {"aid": account_id},
+        )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Card account not found")
+    return {"deleted": True}

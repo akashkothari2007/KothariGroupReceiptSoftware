@@ -108,7 +108,21 @@ export function TransactionRow({
               <div className="receipt-popup" onClick={e => e.stopPropagation()}>
                 <div className="receipt-popup-header">
                   <span className="receipt-popup-title">{tx.receipt_merchant || tx.receipt_file_name}</span>
-                  <button className="modal-close" onClick={() => setReceiptPreviewTxId(null)}>&times;</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      className="btn"
+                      style={{ padding: '4px 8px', fontSize: 12 }}
+                      onClick={() => {
+                        if (!receiptPreviewUrl) return
+                        window.open(receiptPreviewUrl, '_blank', 'noopener,noreferrer')
+                      }}
+                      disabled={!receiptPreviewUrl}
+                      title="Open full-size receipt in new tab"
+                    >
+                      Expand
+                    </button>
+                    <button className="modal-close" onClick={() => setReceiptPreviewTxId(null)}>&times;</button>
+                  </div>
                 </div>
                 {receiptPreviewLoading ? (
                   <div className="shimmer-block" style={{ width: '100%', height: 200, borderRadius: 8 }} />

@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { ShimmerRows } from './ShimmerRows'
 import { TransactionRow } from './TransactionRow'
 import { ExpenseReportSection } from './ExpenseReportSection'
 import { formatMoney, formatUploadDate } from '../utils/formatters'
+import { API, authFetch } from '../utils/api'
 
 export function StatementsTab({
   statements, currentIndex, currentStatement,
@@ -12,7 +14,41 @@ export function StatementsTab({
   showReceiptPreview, receiptPreviewTxId, receiptPreviewUrl, receiptPreviewLoading,
   setReceiptPreviewTxId, linkingTxId, setLinkingTxId,
   handleUpload, handleDelete, fileRef,
+  cardAccounts, selectedAccountId, setSelectedAccountId, fetchCardAccounts,
 }) {
+  const [showNewAccount, setShowNewAccount] = useState(false)
+  const [newAccountName, setNewAccountName] = useState('')
+  const [newAccountType, setNewAccountType] = useState('amex')
+  const [newAccountHolder, setNewAccountHolder] = useState('')
+  const [creatingAccount, setCreatingAccount] = useState(false)
+  const handleCreateAccount = async () => {
+    if (!newAccountName.trim()) return
+    setCreatingAccount(true)
+    try {
+      const res = await authFetch(`${API}/lookups/card-accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newAccountName.trim(),
+          card_type: newAccountType,
+          card_holder: newAccountHolder.trim() || null,
+        }),
+      })
+      const created = await res.json()
+      await fetchCardAccounts()
+      setSelectedAccountId(created.id)
+      setShowNewAccount(false)
+      setNewAccountName('')
+      setNewAccountType('amex')
+      setNewAccountHolder('')
+    } catch (err) {
+      alert('Failed to create account: ' + err.message)
+    }
+    setCreatingAccount(false)
+  }
+
+  const selectedAccount = cardAccounts.find(a => a.id === selectedAccountId)
+
   const goOlder = () => {
     if (currentIndex < statements.length - 1) {
       setCurrentId(statements[currentIndex + 1].id)
@@ -27,6 +63,50 @@ export function StatementsTab({
 
   return (
     <>
+      <div className="card-account-bar">
+        <div className="card-account-selector">
+          <label>Card Account</label>
+          <select
+            value={selectedAccountId || ''}
+            onChange={(e) => setSelectedAccountId(e.target.value)}
+          >
+            {cardAccounts.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.name} {a.card_holder ? `(${a.card_holder})` : ''}
+              </option>
+            ))}
+          </select>
+          <button className="btn btn-sm" onClick={() => setShowNewAccount(!showNewAccount)}>
+            + New Account
+          </button>
+        </div>
+        {showNewAccount && (
+          <div className="new-account-form">
+            <input
+              type="text"
+              placeholder="Account name (e.g. Anupam Amex)"
+              value={newAccountName}
+              onChange={(e) => setNewAccountName(e.target.value)}
+            />
+            <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)}>
+              <option value="amex">Amex</option>
+              <option value="mastercard">Mastercard</option>
+              <option value="visa">Visa</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Card holder name"
+              value={newAccountHolder}
+              onChange={(e) => setNewAccountHolder(e.target.value)}
+            />
+            <button className="btn btn-primary btn-sm" onClick={handleCreateAccount} disabled={creatingAccount}>
+              {creatingAccount ? 'Creating...' : 'Create'}
+            </button>
+            <button className="btn btn-sm" onClick={() => setShowNewAccount(false)}>Cancel</button>
+          </div>
+        )}
+      </div>
+
       <div className="toolbar">
         <div className="nav-group">
           <button className="btn" disabled={currentIndex >= statements.length - 1} onClick={goOlder}>
@@ -131,8 +211,11 @@ export function StatementsTab({
         />
       )}
 
-      {!currentStatement && (
-        <div className="empty">Upload an Amex CSV to get started.</div>
+      {!currentStatement && selectedAccountId && (
+        <div className="empty">No statements for this account yet. Upload a CSV to get started.</div>
+      )}
+      {!selectedAccountId && (
+        <div className="empty">Create a card account to get started.</div>
       )}
     </>
   )
