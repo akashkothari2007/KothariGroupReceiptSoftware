@@ -83,6 +83,8 @@ function App() {
     fetchCardAccounts().then(accounts => {
       if (accounts.length > 0) {
         setSelectedAccountId(accounts[0].id)
+      } else {
+        setLoadingStatements(false)
       }
     })
     authFetch(`${API}/lookups/gl-codes`).then(r => r.json()).then(setGlCodes)
@@ -182,9 +184,11 @@ function App() {
   useEffect(() => {
     const isMatching = statements.some(s => s.matching_status === 'matching')
     if (!isMatching) return
+    const aid = selectedAccountId
+    if (!aid) return
     const interval = setInterval(async () => {
       try {
-        const res = await authFetch(`${API}/statements`)
+        const res = await authFetch(`${API}/statements?card_account_id=${aid}`)
         const data = await res.json()
         setStatements(data)
         // If matching just finished for current statement, refresh transactions
@@ -196,7 +200,7 @@ function App() {
       } catch {}
     }, 2000)
     return () => clearInterval(interval)
-  }, [statements, currentId, fetchTransactions])
+  }, [statements, currentId, selectedAccountId, fetchTransactions])
 
   const handleDelete = async () => {
     if (!currentStatement) return
@@ -215,7 +219,7 @@ function App() {
     try {
       await authFetch(`${API}/statements/${deletedId}`, { method: 'DELETE' })
     } catch {
-      await fetchStatements()
+      await fetchStatements(selectedAccountId)
     }
   }
 

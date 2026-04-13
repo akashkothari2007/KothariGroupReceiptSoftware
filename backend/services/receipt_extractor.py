@@ -111,6 +111,8 @@ async def extract_receipt_data(receipt_id: str, storage_path: str, file_type: st
             "tax_type": "tax_type",
             "total_amount": "total_amount",
             "country": "country",
+            "city": "city",
+            "province": "province",
         }
 
         for ai_key, db_key in field_map.items():

@@ -61,9 +61,9 @@ def apply_match(transaction_id: str, receipt_id: str, match_status: str, match_m
                 {"tid": old_tid},
             )
 
-        # Fetch receipt details for tax logic
+        # Fetch receipt details for tax logic + location
         r = conn.execute(
-            text("SELECT tax_amount, tax_type, country FROM receipts WHERE id = :id"),
+            text("SELECT tax_amount, tax_type, country, city, province FROM receipts WHERE id = :id"),
             {"id": receipt_id},
         ).fetchone()
 
@@ -74,6 +74,8 @@ def apply_match(transaction_id: str, receipt_id: str, match_status: str, match_m
         receipt_tax = float(r[0]) if r[0] is not None else None
         receipt_tax_type = r[1]
         receipt_country = (r[2] or "").strip().upper()
+        receipt_city = r[3]
+        receipt_province = r[4]
 
         # Determine tax for the transaction
         is_canadian_tax = (
@@ -89,13 +91,30 @@ def apply_match(transaction_id: str, receipt_id: str, match_status: str, match_m
             reason = f"foreign country={receipt_country}" if receipt_country and receipt_country != "CA" else f"tax_type={receipt_tax_type}"
             logger.info(f"  Non-claimable tax ({reason}) → setting tx tax to $0.00")
 
-        # Update transaction: link receipt, set match_status, fill tax
+        # Build location overrides from receipt (only if AI extracted non-null values)
+        location_sets = ""
+        location_params = {}
+        if receipt_city:
+            location_sets += ", city = :r_city"
+            location_params["r_city"] = receipt_city
+            logger.info(f"  Overriding tx city → {receipt_city}")
+        if receipt_province:
+            location_sets += ", province = :r_province"
+            location_params["r_province"] = receipt_province
+            logger.info(f"  Overriding tx province → {receipt_province}")
+        if receipt_country:
+            location_sets += ", country = :r_country"
+            location_params["r_country"] = receipt_country
+            logger.info(f"  Overriding tx country → {receipt_country}")
+
+        # Update transaction: link receipt, set match_status, fill tax, update location
         conn.execute(
-            text("""
+            text(f"""
                 UPDATE transactions
                 SET matched_receipt_id = :rid,
                     match_status = :status,
                     tax_amount = :tax
+                    {location_sets}
                 WHERE id = :tid
             """),
             {
@@ -103,6 +122,7 @@ def apply_match(transaction_id: str, receipt_id: str, match_status: str, match_m
                 "rid": receipt_id,
                 "status": match_status,
                 "tax": tx_tax,
+                **location_params,
             },
         )
 

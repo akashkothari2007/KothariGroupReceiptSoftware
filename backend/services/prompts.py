@@ -9,6 +9,8 @@ Return ONLY valid JSON with these exact keys:
   "tax_type": "HST or GST or none",
   "total_amount": 0.00,
   "country": "CA or US (2-letter code)",
+  "city": "City name or null",
+  "province": "Province/state code (e.g. ON, BC, AB, NY) or null",
   "is_refund": false
 }
 
@@ -43,8 +45,11 @@ TAX RULES:
 - If tax is labeled "Tax" with no type and is ~13-15%, assume HST; if ~5%, assume GST
 - For foreign receipts, set tax_amount to 0 and tax_type to "none"
 
-COUNTRY RULES:
-- DEFAULT TO "CA" (Canada). Only use a different country code if there is CLEAR evidence the business is foreign
+LOCATION RULES:
+- city: extract the city where the business is located from the receipt address. Use proper case (e.g. "Toronto", "North York", "Mississauga"). null if not found.
+- province: extract the province/state code (e.g. "ON", "BC", "AB", "NY", "CA"). null if not found.
+- For airlines/flights: use the city from the merchant's billing address, NOT the flight destination.
+- country: DEFAULT TO "CA" (Canada). Only use a different country code if there is CLEAR evidence the business is foreign.
 - Evidence of foreign: US/foreign address, USD currency explicitly stated, non-Canadian phone format, foreign tax (e.g. "Sales Tax" with US state)
 - Canadian cities, provinces, or $ amounts alone are NOT evidence of being foreign — Canada uses $ too
 - If the receipt is clearly foreign (not Canadian), set tax_amount to 0 and tax_type to "none"

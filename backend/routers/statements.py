@@ -379,6 +379,22 @@ def get_transactions(statement_id: str):
 def delete_statement(statement_id: str):
     matching_status.pop(statement_id, None)
     with engine.begin() as conn:
+        # Unlink any receipts matched to this statement's transactions
+        # (sets them back to unmatched so they can re-match after re-upload)
+        conn.execute(
+            text("""
+                UPDATE receipts SET transaction_id = NULL, match_status = 'unmatched'
+                WHERE transaction_id IN (
+                    SELECT id FROM transactions WHERE statement_id = :sid
+                )
+            """),
+            {"sid": statement_id},
+        )
+        # Delete transactions then statement
+        conn.execute(
+            text("DELETE FROM transactions WHERE statement_id = :sid"),
+            {"sid": statement_id},
+        )
         conn.execute(
             text("DELETE FROM statements WHERE id = :sid"),
             {"sid": statement_id},
