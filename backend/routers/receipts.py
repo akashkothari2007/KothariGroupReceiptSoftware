@@ -43,7 +43,8 @@ def list_receipts():
                        r.merchant_name, r.receipt_date, r.tax_amount, r.tax_type,
                        r.total_amount, r.match_status, r.processing_status, r.created_at,
                        r.transaction_id, t.merchant as tx_merchant, t.amount_cad as tx_amount,
-                       t.transaction_date as tx_date, r.country
+                       t.transaction_date as tx_date, r.country, r.city, r.province,
+                       r.subtotal
                 FROM receipts r
                 LEFT JOIN transactions t ON t.id = r.transaction_id
                 ORDER BY r.created_at DESC
@@ -71,6 +72,9 @@ def list_receipts():
             "tx_amount": float(r[15]) if r[15] is not None else None,
             "tx_date": str(r[16]) if r[16] else None,
             "country": r[17],
+            "city": r[18],
+            "province": r[19],
+            "subtotal": float(r[20]) if r[20] is not None else None,
         }
         for r in rows
     ]
@@ -145,6 +149,73 @@ class ReceiptUpdate(BaseModel):
 
 MATCH_RELEVANT_FIELDS = {"merchant_name", "receipt_date", "total_amount", "country"}
 
+CANADIAN_TAX_TYPES = {"HST", "GST"}
+
+
+def _sync_receipt_edits_to_transaction(receipt_id: str, transaction_id: str, fields: dict, edited_tx_fields: set):
+    """Propagate receipt field edits to the linked transaction (mirrors apply_match logic)."""
+    from services.rules import apply_rules
+
+    with engine.begin() as conn:
+        set_parts = []
+        params = {"tid": transaction_id}
+        needs_rules = False
+
+        if "city" in edited_tx_fields:
+            val = fields.get("city")
+            if val and val != "":
+                set_parts.append("city = :r_city")
+                params["r_city"] = val
+            else:
+                set_parts.append("city = NULL")
+            set_parts.append("company_id = NULL")
+            needs_rules = True
+
+        if "province" in edited_tx_fields:
+            val = fields.get("province")
+            if val and val != "":
+                set_parts.append("province = :r_province")
+                params["r_province"] = val
+            else:
+                set_parts.append("province = NULL")
+            needs_rules = True
+
+        if "country" in edited_tx_fields:
+            val = fields.get("country")
+            if val and val != "":
+                set_parts.append("country = :r_country")
+                params["r_country"] = val
+            else:
+                set_parts.append("country = NULL")
+
+        if "tax_amount" in edited_tx_fields or "tax_type" in edited_tx_fields:
+            # Re-derive tax using same logic as apply_match
+            receipt = conn.execute(
+                text("SELECT tax_amount, tax_type FROM receipts WHERE id = :rid"),
+                {"rid": receipt_id},
+            ).fetchone()
+            if receipt:
+                r_tax = float(receipt[0]) if receipt[0] is not None else None
+                r_type = receipt[1]
+                is_canadian = r_type and r_type.upper() in CANADIAN_TAX_TYPES
+                if is_canadian and r_tax is not None:
+                    set_parts.append("tax_amount = :tx_tax")
+                    params["tx_tax"] = r_tax
+                else:
+                    set_parts.append("tax_amount = 0")
+
+        if set_parts:
+            conn.execute(
+                text(f"UPDATE transactions SET {', '.join(set_parts)} WHERE id = :tid"),
+                params,
+            )
+
+    if needs_rules:
+        try:
+            apply_rules(transaction_id)
+        except Exception as e:
+            logger.error(f"Rules failed after receipt edit sync for tx={transaction_id}: {e}", exc_info=True)
+
 
 @router.patch("/{receipt_id}")
 def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
@@ -182,6 +253,16 @@ def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
                 {"status": fields["match_status"], "rid": receipt_id},
             )
 
+    # If receipt is matched, propagate relevant field changes to the linked transaction
+    TX_SYNC_FIELDS = {"city", "province", "country", "tax_amount", "tax_type"}
+    edited_tx_fields = set(fields.keys()) & TX_SYNC_FIELDS
+    if edited_tx_fields and not is_unmatched:
+        transaction_id = str(row[0])
+        try:
+            _sync_receipt_edits_to_transaction(receipt_id, transaction_id, fields, edited_tx_fields)
+        except Exception as e:
+            logger.error(f"Failed syncing receipt edits to tx={transaction_id}: {e}", exc_info=True)
+
     # Auto-rematch if user edited a matching-relevant field and receipt is unmatched
     edited_match_fields = set(fields.keys()) & MATCH_RELEVANT_FIELDS
     if edited_match_fields and is_unmatched and is_completed:
@@ -201,7 +282,7 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
     """Re-process a failed receipt extraction."""
     with engine.connect() as conn:
         row = conn.execute(
-            text("SELECT image_url, file_type, processing_status, source FROM receipts WHERE id = :id"),
+            text("SELECT image_url, file_type, processing_status, source, transaction_id FROM receipts WHERE id = :id"),
             {"id": receipt_id},
         ).fetchone()
 
@@ -209,6 +290,10 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=404, detail="Receipt not found")
     if row[2] not in ("failed", "completed"):
         raise HTTPException(status_code=400, detail=f"Receipt is {row[2]}, not retryable")
+
+    # Clean up existing match on both sides before resetting
+    if row[4]:
+        remove_match(str(row[4]))
 
     # Reset extracted fields and status
     with engine.begin() as conn:
@@ -218,8 +303,7 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
                 SET processing_status = 'pending',
                     merchant_name = NULL, receipt_date = NULL, subtotal = NULL,
                     tax_amount = NULL, tax_type = NULL, total_amount = NULL,
-                    country = NULL, city = NULL, province = NULL, raw_ai_response = NULL,
-                    transaction_id = NULL, match_status = 'unmatched'
+                    country = NULL, city = NULL, province = NULL, raw_ai_response = NULL
                 WHERE id = :id
             """),
             {"id": receipt_id},
@@ -318,7 +402,9 @@ def delete_receipt(receipt_id: str):
     # Clear reference on transactions and delete receipt row
     with engine.begin() as conn:
         conn.execute(
-            text("UPDATE transactions SET matched_receipt_id = NULL WHERE matched_receipt_id = :id"),
+            text("""UPDATE transactions
+                    SET matched_receipt_id = NULL, match_status = 'unmatched', tax_amount = NULL
+                    WHERE matched_receipt_id = :id"""),
             {"id": receipt_id},
         )
         conn.execute(

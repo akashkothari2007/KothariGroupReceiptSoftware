@@ -194,13 +194,14 @@ function App() {
         // If matching just finished for current statement, refresh transactions
         const prev = statements.find(s => s.id === currentId)
         const curr = data.find(s => s.id === currentId)
-        if (prev?.matching_status === 'matching' && curr?.matching_status !== 'matching' && currentId) {
-          fetchTransactions(currentId, true)
+        if (prev?.matching_status === 'matching' && curr?.matching_status !== 'matching') {
+          if (currentId) fetchTransactions(currentId, true)
+          fetchReceipts()
         }
       } catch {}
     }, 2000)
     return () => clearInterval(interval)
-  }, [statements, currentId, selectedAccountId, fetchTransactions])
+  }, [statements, currentId, selectedAccountId, fetchTransactions, fetchReceipts])
 
   const handleDelete = async () => {
     if (!currentStatement) return
@@ -218,6 +219,7 @@ function App() {
 
     try {
       await authFetch(`${API}/statements/${deletedId}`, { method: 'DELETE' })
+      fetchReceipts()  // refresh receipts since their matches were cleared
     } catch {
       await fetchStatements(selectedAccountId)
     }
@@ -260,7 +262,11 @@ function App() {
       ...t, matched_receipt_id: receiptId, match_status: 'matched_sure',
       receipt_file_name: receipt?.file_name, receipt_merchant: receipt?.merchant_name,
     } : t))
-    setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, match_status: 'matched_sure' } : r))
+    const tx = transactions.find(t => t.id === txId)
+    setReceipts(prev => prev.map(r => r.id === receiptId ? {
+      ...r, match_status: 'matched_sure', transaction_id: txId,
+      tx_merchant: tx?.merchant, tx_amount: tx?.amount_cad, tx_date: tx?.transaction_date,
+    } : r))
     try {
       const res = await authFetch(`${API}/transactions/${txId}/match`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -275,7 +281,10 @@ function App() {
         ...t, matched_receipt_id: null, match_status: 'unmatched',
         receipt_file_name: null, receipt_merchant: null,
       } : t))
-      setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, match_status: 'unmatched' } : r))
+      setReceipts(prev => prev.map(r => r.id === receiptId ? {
+        ...r, match_status: 'unmatched', transaction_id: null,
+        tx_merchant: null, tx_amount: null, tx_date: null,
+      } : r))
     }
   }
 
@@ -288,7 +297,10 @@ function App() {
       receipt_file_name: null, receipt_merchant: null,
     } : t))
     if (oldReceiptId) {
-      setReceipts(prev => prev.map(r => r.id === oldReceiptId ? { ...r, match_status: 'unmatched' } : r))
+      setReceipts(prev => prev.map(r => r.id === oldReceiptId ? {
+        ...r, match_status: 'unmatched', transaction_id: null,
+        tx_merchant: null, tx_amount: null, tx_date: null,
+      } : r))
     }
     setReceiptPreviewTxId(null)
     try {
@@ -350,6 +362,7 @@ function App() {
     try {
       const res = await authFetch(`${API}/receipts/${receiptId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
+      if (currentId) fetchTransactions(currentId, true)  // refresh transactions since match was cleared
     } catch {
       setReceipts(prev => [...prev, removed].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)))
     }

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -5,6 +6,9 @@ from sqlalchemy import text
 from db import engine
 from middleware.auth import get_current_user
 from services.match_writer import apply_match, remove_match
+from services.rules import apply_rules
+
+logger = logging.getLogger("transactions")
 
 router = APIRouter(prefix="/transactions", tags=["transactions"], dependencies=[Depends(get_current_user)])
 
@@ -76,6 +80,15 @@ def update_transaction(transaction_id: str, updates: TransactionUpdate):
 
     with engine.begin() as conn:
         conn.execute(text(query), params)
+
+    # Re-run rules when user clears company/gl_code or changes city/merchant
+    # (fields that rules depend on were modified)
+    rules_fields = {"city", "province", "company_id", "gl_code_id", "merchant", "description"}
+    if set(fields.keys()) & rules_fields:
+        try:
+            apply_rules(transaction_id)
+        except Exception as e:
+            logger.error(f"Rules failed after PATCH for tx={transaction_id}: {e}", exc_info=True)
 
     return {"updated": True}
 
