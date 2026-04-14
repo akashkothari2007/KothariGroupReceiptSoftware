@@ -101,12 +101,13 @@ def download_live_pdf(statement_id: str, company_id: str):
         cycle_end=stmt[2],
         transactions=transactions,
     )
+    pdf_bytes = add_watermark(pdf_bytes, "SNAPSHOT")
 
     safe = company[0].replace(" ", "_").replace("/", "_")
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="Expense_Report_{safe}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="Expense_Report_{safe}_SNAPSHOT.pdf"'},
     )
 
 
