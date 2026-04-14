@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback } from 'react'
 import { API, authFetch } from '../utils/api'
 import { formatDate, formatMoney, formatUploadDate } from '../utils/formatters'
 
-export function ExpenseReportSection({ transactions, companies, glCodes, statementId }) {
+export function ExpenseReportSection({ transactions, companies, glCodes, statementId, userRole }) {
   const [expandedCompanyId, setExpandedCompanyId] = useState(null)
   const [downloading, setDownloading] = useState(null)
   const [finalizing, setFinalizing] = useState(null)
@@ -291,7 +291,7 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
                     >
                       {downloading === r.id ? '...' : 'Download'}
                     </button>
-                    {r.status === 'pending' && (
+                    {r.status === 'pending' && userRole === 'admin' && (
                       <button
                         className="report-action-btn approve"
                         onClick={() => handleApprove(r.id)}

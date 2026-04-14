@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from supabase import create_client
 from db import engine
-from middleware.auth import get_current_user
+from middleware.auth import get_current_user, require_admin
 from services.expense_report_handler import generate_pdf, add_watermark, append_receipts
 
 logger = logging.getLogger("expense_reports")
@@ -285,7 +285,7 @@ def download_report(report_id: str):
 # ── Approve ─────────────────────────────────────────────────────────────
 
 @router.post("/{report_id}/approve")
-def approve_report(report_id: str, user: dict = Depends(get_current_user)):
+def approve_report(report_id: str, user: dict = Depends(require_admin)):
     approved_by = user.get("email", "unknown")
     now = datetime.now(timezone.utc)
 

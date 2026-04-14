@@ -26,7 +26,7 @@ function FieldInput({ field, value, onChange }) {
   )
 }
 
-function EditableRow({ item, fields, onSave, onDelete }) {
+function EditableRow({ item, fields, onSave, onDelete, readOnly }) {
   const [editing, setEditing] = useState(false)
   const [values, setValues] = useState(item)
   const [saving, setSaving] = useState(false)
@@ -58,21 +58,23 @@ function EditableRow({ item, fields, onSave, onDelete }) {
           )}
         </td>
       ))}
-      <td className="settings-actions">
-        {editing ? (
-          <>
-            <button className="settings-btn settings-btn-save" onClick={handleSave} disabled={saving}>
-              {saving ? '...' : 'Save'}
-            </button>
-            <button className="settings-btn settings-btn-cancel" onClick={handleCancel}>Cancel</button>
-          </>
-        ) : (
-          <>
-            <button className="settings-btn settings-btn-edit" onClick={() => setEditing(true)}>Edit</button>
-            <button className="settings-btn settings-btn-delete" onClick={() => onDelete(item.id)}>Delete</button>
-          </>
-        )}
-      </td>
+      {!readOnly && (
+        <td className="settings-actions">
+          {editing ? (
+            <>
+              <button className="settings-btn settings-btn-save" onClick={handleSave} disabled={saving}>
+                {saving ? '...' : 'Save'}
+              </button>
+              <button className="settings-btn settings-btn-cancel" onClick={handleCancel}>Cancel</button>
+            </>
+          ) : (
+            <>
+              <button className="settings-btn settings-btn-edit" onClick={() => setEditing(true)}>Edit</button>
+              <button className="settings-btn settings-btn-delete" onClick={() => onDelete(item.id)}>Delete</button>
+            </>
+          )}
+        </td>
+      )}
     </tr>
   )
 }
@@ -116,7 +118,7 @@ function AddRow({ fields, onAdd }) {
   )
 }
 
-function SettingsTable({ title, items, fields, onCreate, onUpdate, onDelete }) {
+function SettingsTable({ title, items, fields, onCreate, onUpdate, onDelete, readOnly }) {
   return (
     <div className="settings-card">
       <h3 className="settings-card-title">{title}</h3>
@@ -124,7 +126,7 @@ function SettingsTable({ title, items, fields, onCreate, onUpdate, onDelete }) {
         <thead>
           <tr>
             {fields.map(f => <th key={f.key}>{f.label}</th>)}
-            <th className="settings-actions-col">Actions</th>
+            {!readOnly && <th className="settings-actions-col">Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -135,21 +137,96 @@ function SettingsTable({ title, items, fields, onCreate, onUpdate, onDelete }) {
               fields={fields}
               onSave={onUpdate}
               onDelete={onDelete}
+              readOnly={readOnly}
             />
           ))}
-          <AddRow fields={fields} onAdd={onCreate} />
+          {!readOnly && <AddRow fields={fields} onAdd={onCreate} />}
         </tbody>
       </table>
       {items.length === 0 && (
-        <div className="settings-empty">No items yet. Add one above.</div>
+        <div className="settings-empty">{readOnly ? 'No items.' : 'No items yet. Add one above.'}</div>
       )}
     </div>
   )
 }
 
-export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
+function UserManagement() {
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState(null)
+
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  const fetchUsers = async () => {
+    try {
+      const res = await authFetch(`${API}/users`)
+      if (res.ok) setUsers(await res.json())
+    } catch {}
+    setLoading(false)
+  }
+
+  const handleRoleChange = async (userId, newRole) => {
+    setUpdating(userId)
+    try {
+      const res = await authFetch(`${API}/users/${userId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      })
+      if (res.ok) {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
+      }
+    } catch {}
+    setUpdating(null)
+  }
+
+  if (loading) return <div className="settings-card"><div className="settings-empty">Loading users...</div></div>
+
+  return (
+    <div className="settings-card">
+      <h3 className="settings-card-title">User Management</h3>
+      <table className="settings-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Joined</th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.map(u => (
+            <tr key={u.id}>
+              <td><span className="settings-value">{u.full_name || '—'}</span></td>
+              <td><span className="settings-value">{u.email || '—'}</span></td>
+              <td>
+                <select
+                  className="settings-input"
+                  value={u.role}
+                  onChange={e => handleRoleChange(u.id, e.target.value)}
+                  disabled={updating === u.id}
+                >
+                  <option value="editor">Editor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </td>
+              <td><span className="settings-value">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh, userRole }) {
   const [vendorMappings, setVendorMappings] = useState([])
   const [cityRules, setCityRules] = useState([])
+
+  const isAdmin = userRole === 'admin'
+  const readOnly = !isAdmin
 
   useEffect(() => {
     fetchVendorMappings()
@@ -326,6 +403,8 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
 
   return (
     <div className="settings-tab">
+      {isAdmin && <UserManagement />}
+
       <SettingsTable
         title="Companies"
         items={companies}
@@ -335,6 +414,7 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
         onCreate={handleCreateCompany}
         onUpdate={handleUpdateCompany}
         onDelete={handleDeleteCompany}
+        readOnly={readOnly}
       />
 
       <SettingsTable
@@ -347,6 +427,7 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
         onCreate={handleCreateGlCode}
         onUpdate={handleUpdateGlCode}
         onDelete={handleDeleteGlCode}
+        readOnly={readOnly}
       />
 
       <SettingsTable
@@ -358,6 +439,7 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
         onCreate={handleCreateExpenseType}
         onUpdate={handleUpdateExpenseType}
         onDelete={handleDeleteExpenseType}
+        readOnly={readOnly}
       />
 
       <SettingsTable
@@ -370,6 +452,7 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
         onCreate={handleCreateVendorMapping}
         onUpdate={handleUpdateVendorMapping}
         onDelete={handleDeleteVendorMapping}
+        readOnly={readOnly}
       />
 
       <SettingsTable
@@ -383,6 +466,7 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh }) {
         onCreate={handleCreateCityRule}
         onUpdate={handleUpdateCityRule}
         onDelete={handleDeleteCityRule}
+        readOnly={readOnly}
       />
     </div>
   )

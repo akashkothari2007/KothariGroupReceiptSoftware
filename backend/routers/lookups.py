@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import text
 from db import engine
-from middleware.auth import get_current_user
+from middleware.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/lookups", tags=["lookups"], dependencies=[Depends(get_current_user)])
 
@@ -30,7 +30,7 @@ class GlCodeUpdate(BaseModel):
 
 
 @router.post("/gl-codes")
-def create_gl_code(body: GlCodeCreate):
+def create_gl_code(body: GlCodeCreate, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         row = conn.execute(
             text("INSERT INTO gl_codes (code, name) VALUES (:code, :name) RETURNING id, code, name"),
@@ -40,7 +40,7 @@ def create_gl_code(body: GlCodeCreate):
 
 
 @router.patch("/gl-codes/{gl_code_id}")
-def update_gl_code(gl_code_id: str, body: GlCodeUpdate):
+def update_gl_code(gl_code_id: str, body: GlCodeUpdate, user: dict = Depends(require_admin)):
     fields = {k: v.strip() for k, v in body.model_dump().items() if v is not None}
     if not fields:
         return {"updated": False}
@@ -62,7 +62,7 @@ def update_gl_code(gl_code_id: str, body: GlCodeUpdate):
 
 
 @router.delete("/gl-codes/{gl_code_id}")
-def delete_gl_code(gl_code_id: str):
+def delete_gl_code(gl_code_id: str, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         conn.execute(
             text("UPDATE transactions SET gl_code_id = NULL WHERE gl_code_id = :gid"),
@@ -97,7 +97,7 @@ class CompanyUpdate(BaseModel):
 
 
 @router.post("/companies")
-def create_company(body: CompanyCreate):
+def create_company(body: CompanyCreate, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         row = conn.execute(
             text("INSERT INTO companies (name) VALUES (:name) RETURNING id, name"),
@@ -107,7 +107,7 @@ def create_company(body: CompanyCreate):
 
 
 @router.patch("/companies/{company_id}")
-def update_company(company_id: str, body: CompanyUpdate):
+def update_company(company_id: str, body: CompanyUpdate, user: dict = Depends(require_admin)):
     if not body.name:
         return {"updated": False}
 
@@ -122,7 +122,7 @@ def update_company(company_id: str, body: CompanyUpdate):
 
 
 @router.delete("/companies/{company_id}")
-def delete_company(company_id: str):
+def delete_company(company_id: str, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         conn.execute(
             text("UPDATE transactions SET company_id = NULL WHERE company_id = :cid"),
@@ -157,7 +157,7 @@ class ExpenseTypeUpdate(BaseModel):
 
 
 @router.post("/expense-types")
-def create_expense_type(body: ExpenseTypeCreate):
+def create_expense_type(body: ExpenseTypeCreate, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         row = conn.execute(
             text("INSERT INTO expense_types (name) VALUES (:name) RETURNING id, name"),
@@ -167,7 +167,7 @@ def create_expense_type(body: ExpenseTypeCreate):
 
 
 @router.patch("/expense-types/{expense_type_id}")
-def update_expense_type(expense_type_id: str, body: ExpenseTypeUpdate):
+def update_expense_type(expense_type_id: str, body: ExpenseTypeUpdate, user: dict = Depends(require_admin)):
     if not body.name:
         return {"updated": False}
 
@@ -182,7 +182,7 @@ def update_expense_type(expense_type_id: str, body: ExpenseTypeUpdate):
 
 
 @router.delete("/expense-types/{expense_type_id}")
-def delete_expense_type(expense_type_id: str):
+def delete_expense_type(expense_type_id: str, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         conn.execute(
             text("UPDATE transactions SET expense_type_id = NULL WHERE expense_type_id = :eid"),
@@ -221,7 +221,7 @@ class CardAccountUpdate(BaseModel):
 
 
 @router.post("/card-accounts")
-def create_card_account(body: CardAccountCreate):
+def create_card_account(body: CardAccountCreate, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         row = conn.execute(
             text("""INSERT INTO card_accounts (name, card_type, card_holder)
@@ -234,7 +234,7 @@ def create_card_account(body: CardAccountCreate):
 
 
 @router.patch("/card-accounts/{account_id}")
-def update_card_account(account_id: str, body: CardAccountUpdate):
+def update_card_account(account_id: str, body: CardAccountUpdate, user: dict = Depends(require_admin)):
     fields = {}
     for k, v in body.model_dump().items():
         if v is not None:
@@ -259,7 +259,7 @@ def update_card_account(account_id: str, body: CardAccountUpdate):
 
 
 @router.delete("/card-accounts/{account_id}")
-def delete_card_account(account_id: str):
+def delete_card_account(account_id: str, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         result = conn.execute(
             text("DELETE FROM card_accounts WHERE id = :aid"),
@@ -299,7 +299,7 @@ class VendorMappingUpdate(BaseModel):
 
 
 @router.post("/vendor-mappings")
-def create_vendor_mapping(body: VendorMappingCreate):
+def create_vendor_mapping(body: VendorMappingCreate, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         row = conn.execute(
             text("""INSERT INTO vendor_mappings (vendor_name, gl_code_id)
@@ -311,7 +311,7 @@ def create_vendor_mapping(body: VendorMappingCreate):
 
 
 @router.patch("/vendor-mappings/{mapping_id}")
-def update_vendor_mapping(mapping_id: str, body: VendorMappingUpdate):
+def update_vendor_mapping(mapping_id: str, body: VendorMappingUpdate, user: dict = Depends(require_admin)):
     fields = {}
     if body.vendor_name is not None:
         fields["vendor_name"] = body.vendor_name.strip()
@@ -338,7 +338,7 @@ def update_vendor_mapping(mapping_id: str, body: VendorMappingUpdate):
 
 
 @router.delete("/vendor-mappings/{mapping_id}")
-def delete_vendor_mapping(mapping_id: str):
+def delete_vendor_mapping(mapping_id: str, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         result = conn.execute(
             text("DELETE FROM vendor_mappings WHERE id = :mid"),
@@ -380,7 +380,7 @@ class CityCompanyRuleUpdate(BaseModel):
 
 
 @router.post("/city-company-rules")
-def create_city_company_rule(body: CityCompanyRuleCreate):
+def create_city_company_rule(body: CityCompanyRuleCreate, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         row = conn.execute(
             text("""INSERT INTO city_company_rules (city, province, company_id)
@@ -393,7 +393,7 @@ def create_city_company_rule(body: CityCompanyRuleCreate):
 
 
 @router.patch("/city-company-rules/{rule_id}")
-def update_city_company_rule(rule_id: str, body: CityCompanyRuleUpdate):
+def update_city_company_rule(rule_id: str, body: CityCompanyRuleUpdate, user: dict = Depends(require_admin)):
     fields = {}
     if body.city is not None:
         fields["city"] = body.city.strip()
@@ -425,7 +425,7 @@ def update_city_company_rule(rule_id: str, body: CityCompanyRuleUpdate):
 
 
 @router.delete("/city-company-rules/{rule_id}")
-def delete_city_company_rule(rule_id: str):
+def delete_city_company_rule(rule_id: str, user: dict = Depends(require_admin)):
     with engine.begin() as conn:
         result = conn.execute(
             text("DELETE FROM city_company_rules WHERE id = :rid"),

@@ -15,6 +15,7 @@ export function StatementsTab({
   setReceiptPreviewTxId, linkingTxId, setLinkingTxId,
   handleUpload, handleDelete, fileRef,
   cardAccounts, selectedAccountId, setSelectedAccountId, fetchCardAccounts,
+  userRole,
 }) {
   const [showNewAccount, setShowNewAccount] = useState(false)
   const [newAccountName, setNewAccountName] = useState('')
@@ -208,6 +209,7 @@ export function StatementsTab({
           companies={companies}
           glCodes={glCodes}
           statementId={currentId}
+          userRole={userRole}
         />
       )}
 

@@ -9,7 +9,7 @@ import { ReceiptDetailModal } from './components/ReceiptDetailModal'
 import { SettingsTab } from './components/SettingsTab'
 
 function App() {
-  const { signOut } = useAuth()
+  const { signOut, userRole } = useAuth()
   const [activeTab, setActiveTab] = useState('statements')
 
   // ── Statements state ──
@@ -497,6 +497,7 @@ function App() {
           selectedAccountId={selectedAccountId}
           setSelectedAccountId={setSelectedAccountId}
           fetchCardAccounts={fetchCardAccounts}
+          userRole={userRole}
         />
       )}
 
@@ -524,6 +525,7 @@ function App() {
           glCodes={glCodes}
           expenseTypes={expenseTypes}
           onRefresh={refreshLookups}
+          userRole={userRole}
         />
       )}
 
