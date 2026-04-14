@@ -9,20 +9,24 @@ export function TransactionRow({
   return (
     <tr className={tx.amount_cad < 0 ? 'credit-row' : ''} data-tx-id={tx.id}>
       <td className="date-cell">{formatDate(tx.transaction_date)}</td>
-      <td>
-        <input
-          type="text"
-          value={tx.merchant || ''}
-          onChange={e => updateTransaction(tx.id, 'merchant', e.target.value)}
-          className="cell-input"
-        />
+      <td className="merchant-cell">
+        <div className="merchant-text">{tx.merchant || ''}</div>
       </td>
-      <td>
+      <td className="location-cell">
         <input
           type="text"
-          value={tx.description || ''}
-          onChange={e => updateTransaction(tx.id, 'description', e.target.value)}
+          value={tx.city || ''}
+          onChange={e => updateTransaction(tx.id, 'city', e.target.value)}
           className="cell-input"
+          placeholder="City"
+          style={{ marginBottom: 2 }}
+        />
+        <input
+          type="text"
+          value={tx.country || ''}
+          onChange={e => updateTransaction(tx.id, 'country', e.target.value)}
+          className="cell-input cell-input-secondary"
+          placeholder="Country"
         />
       </td>
       <td className="amount-cell">

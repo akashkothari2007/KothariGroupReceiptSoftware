@@ -160,7 +160,7 @@ export function StatementsTab({
               <tr>
                 <th>Date</th>
                 <th>Merchant</th>
-                <th>Description</th>
+                <th>Location</th>
                 <th className="amount-col">Amount</th>
                 <th className="amount-col">Tax (HST/GST)</th>
                 <th>Company</th>

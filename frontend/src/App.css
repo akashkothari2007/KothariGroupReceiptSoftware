@@ -262,6 +262,17 @@ tr:hover td { background: #f9fafb; }
 
 .cell-input::placeholder { color: #d1d5db; }
 
+.merchant-cell { min-width: 180px; max-width: 220px; }
+.merchant-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.location-cell { min-width: 100px; }
+.cell-input-secondary { font-size: 11px; color: #9ca3af; }
+
 .cell-input-num {
   text-align: right;
   max-width: 90px;

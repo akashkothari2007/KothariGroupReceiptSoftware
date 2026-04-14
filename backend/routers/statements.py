@@ -354,7 +354,8 @@ def get_transactions(statement_id: str):
                        t.match_status, t.matched_receipt_id,
                        r.file_name as receipt_file_name,
                        r.merchant_name as receipt_merchant,
-                       r.file_type as receipt_file_type
+                       r.file_type as receipt_file_type,
+                       t.city, t.province, t.country
                 FROM transactions t
                 LEFT JOIN receipts r ON r.id = t.matched_receipt_id
                 WHERE t.statement_id = :sid
@@ -380,6 +381,9 @@ def get_transactions(statement_id: str):
             "receipt_file_name": r[13],
             "receipt_merchant": r[14],
             "receipt_file_type": r[15],
+            "city": r[16],
+            "province": r[17],
+            "country": r[18],
         }
         for r in rows
     ]
