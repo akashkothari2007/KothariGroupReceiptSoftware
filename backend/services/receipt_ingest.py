@@ -11,6 +11,7 @@ from supabase import create_client
 from db import engine
 from services.receipt_extractor import extract_receipt_data, update_receipt
 from services.match_run import run_matching_for_receipt
+from services.email_body_extractor import extract_receipt_from_body
 
 logger = logging.getLogger("receipt_ingest")
 
@@ -22,6 +23,67 @@ _supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def _run_extraction_bg(receipt_id: str, storage_path: str, file_type: str):
     asyncio.run(extract_receipt_data(receipt_id, storage_path, file_type, _supabase))
+
+
+def _run_email_body_extraction_bg(receipt_id: str, storage_path: str):
+    """Background re-extraction path for HTML receipts ingested from email bodies."""
+    update_receipt(receipt_id, {"processing_status": "processing"})
+
+    try:
+        file_bytes = _supabase.storage.from_(BUCKET).download(storage_path)
+        html_body = file_bytes.decode("utf-8", errors="ignore")
+        extracted = asyncio.run(extract_receipt_from_body(html_body))
+
+        if not extracted:
+            update_receipt(
+                receipt_id,
+                {
+                    "processing_status": "failed",
+                    "raw_ai_response": json.dumps({"error": "No receipt found in email body"}),
+                },
+            )
+            return
+
+        field_map = {
+            "merchant_name": "merchant_name",
+            "receipt_date": "receipt_date",
+            "subtotal": "subtotal",
+            "tax_amount": "tax_amount",
+            "tax_type": "tax_type",
+            "total_amount": "total_amount",
+            "country": "country",
+            "city": "city",
+            "province": "province",
+        }
+        fields = {
+            "raw_ai_response": json.dumps(extracted),
+            "processing_status": "completed",
+        }
+        for ai_key, db_key in field_map.items():
+            val = extracted.get(ai_key)
+            if val is not None and val != "null" and val != "":
+                fields[db_key] = val
+
+        is_refund = extracted.get("is_refund")
+        if is_refund is True and fields.get("total_amount") is not None:
+            try:
+                amt = float(fields["total_amount"])
+                if amt > 0:
+                    fields["total_amount"] = -amt
+            except (ValueError, TypeError):
+                pass
+
+        update_receipt(receipt_id, fields)
+        run_matching_for_receipt(receipt_id)
+    except Exception as e:
+        logger.error(f"[{receipt_id}] Email body retry extraction failed: {e}", exc_info=True)
+        update_receipt(
+            receipt_id,
+            {
+                "processing_status": "failed",
+                "raw_ai_response": json.dumps({"error": str(e)}),
+            },
+        )
 
 
 def ingest_receipt_bytes(

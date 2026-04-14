@@ -8,7 +8,7 @@ from sqlalchemy import text
 from supabase import create_client
 from db import engine
 from middleware.auth import get_current_user
-from services.receipt_ingest import ingest_receipt_bytes, _run_extraction_bg
+from services.receipt_ingest import ingest_receipt_bytes, _run_extraction_bg, _run_email_body_extraction_bg
 from services.match_run import run_matching_for_receipt
 from services.match_writer import remove_match
 
@@ -201,7 +201,7 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
     """Re-process a failed receipt extraction."""
     with engine.connect() as conn:
         row = conn.execute(
-            text("SELECT image_url, file_type, processing_status FROM receipts WHERE id = :id"),
+            text("SELECT image_url, file_type, processing_status, source FROM receipts WHERE id = :id"),
             {"id": receipt_id},
         ).fetchone()
 
@@ -218,7 +218,7 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
                 SET processing_status = 'pending',
                     merchant_name = NULL, receipt_date = NULL, subtotal = NULL,
                     tax_amount = NULL, tax_type = NULL, total_amount = NULL,
-                    country = NULL, raw_ai_response = NULL,
+                    country = NULL, city = NULL, province = NULL, raw_ai_response = NULL,
                     transaction_id = NULL, match_status = 'unmatched'
                 WHERE id = :id
             """),
@@ -226,7 +226,10 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
         )
 
     logger.info(f"Retrying extraction for receipt {receipt_id}")
-    background_tasks.add_task(_run_extraction_bg, receipt_id, row[0], row[1])
+    if row[3] == "email" and row[1] == "text/html":
+        background_tasks.add_task(_run_email_body_extraction_bg, receipt_id, row[0])
+    else:
+        background_tasks.add_task(_run_extraction_bg, receipt_id, row[0], row[1])
     return {"retrying": True, "receipt_id": receipt_id}
 
 
