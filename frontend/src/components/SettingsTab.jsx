@@ -161,7 +161,7 @@ function UserManagement() {
 
   const fetchUsers = async () => {
     try {
-      const res = await authFetch(`${API}/users`)
+      const res = await authFetch(`${API}/users/`)
       if (res.ok) setUsers(await res.json())
     } catch {}
     setLoading(false)
