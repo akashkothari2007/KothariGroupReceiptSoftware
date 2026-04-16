@@ -181,6 +181,8 @@ def _apply_preextracted_fields(receipt_id: str, extracted: dict):
         "tax_type": "tax_type",
         "total_amount": "total_amount",
         "country": "country",
+        "city": "city",
+        "province": "province",
     }
 
     fields = {

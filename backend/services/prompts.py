@@ -76,6 +76,8 @@ If it IS a receipt, return ONLY valid JSON:
   "tax_type": "HST or GST or none",
   "total_amount": 0.00,
   "country": "CA or US (2-letter code)",
+  "city": "City name or null",
+  "province": "Province/state code (e.g. ON, BC, AB, NY) or null",
   "is_refund": false,
   "receipt_text": "Only the receipt-relevant portion of the email (order summary, line items, totals). Keep it short and clean."
 }
@@ -86,6 +88,8 @@ Rules:
 - total_amount: positive even for refunds. Use is_refund field instead.
 - tax_type: "HST" for harmonized provinces (ON/NB/NL/NS/PEI), "GST" for 5% federal only, "none" for foreign/no tax
 - country: default "CA". Only use other codes if clearly foreign (USD stated, US address, etc.)
+- city: extract the city where the business is located. Use proper case (e.g. "Toronto", "Mississauga"). For airlines/flights, use the DEPARTURE city. null if not found.
+- province: extract the province/state code (e.g. "ON", "BC", "AB"). null if not found.
 - receipt_text: extract ONLY the receipt/order portion. Strip email headers, signatures, disclaimers, forwarding headers, marketing footers. Keep merchant name, items, amounts, dates, totals.
 - Return ONLY the JSON object, no markdown, no explanation
 
