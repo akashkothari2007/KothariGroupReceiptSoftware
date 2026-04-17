@@ -2,7 +2,7 @@ import os
 import logging
 import threading
 from typing import Optional
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 from supabase import create_client
@@ -18,6 +18,61 @@ router = APIRouter(prefix="/receipts", tags=["receipts"], dependencies=[Depends(
 BUCKET = "receipts"
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+
+# ── Shared helper ──
+
+def _format_receipt_row(r):
+    """Map a SQL row from the standard receipt query to a dict."""
+    return {
+        "id": str(r[0]),
+        "image_url": r[1],
+        "file_name": r[2],
+        "file_type": r[3],
+        "source": r[4],
+        "merchant_name": r[5],
+        "receipt_date": str(r[6]) if r[6] else None,
+        "tax_amount": float(r[7]) if r[7] is not None else None,
+        "tax_type": r[8],
+        "total_amount": float(r[9]) if r[9] is not None else None,
+        "match_status": r[10],
+        "processing_status": r[11],
+        "created_at": str(r[12]),
+        "transaction_id": str(r[13]) if r[13] else None,
+        "tx_merchant": r[14],
+        "tx_amount": float(r[15]) if r[15] is not None else None,
+        "tx_date": str(r[16]) if r[16] else None,
+        "country": r[17],
+        "city": r[18],
+        "province": r[19],
+        "subtotal": float(r[20]) if r[20] is not None else None,
+        "statement_id": str(r[21]) if r[21] else None,
+        "card_account_id": str(r[22]) if r[22] else None,
+        "card_account_name": r[23],
+        "cycle_start": str(r[24]) if r[24] else None,
+        "cycle_end": str(r[25]) if r[25] else None,
+    }
+
+_BASE_SELECT = """
+    SELECT r.id, r.image_url, r.file_name, r.file_type, r.source,
+           r.merchant_name, r.receipt_date, r.tax_amount, r.tax_type,
+           r.total_amount, r.match_status, r.processing_status, r.created_at,
+           r.transaction_id, t.merchant as tx_merchant, t.amount_cad as tx_amount,
+           t.transaction_date as tx_date, r.country, r.city, r.province,
+           r.subtotal,
+           s.id as statement_id, ca.id as card_account_id,
+           ca.name as card_account_name, s.cycle_start, s.cycle_end
+    FROM receipts r
+    LEFT JOIN transactions t ON t.id = r.transaction_id
+    LEFT JOIN statements s ON s.id = t.statement_id
+    LEFT JOIN card_accounts ca ON ca.id = s.card_account_id
+"""
+
+MATCH_STATUS_MAP = {
+    "unmatched": "unmatched",
+    "unsure": "matched_unsure",
+    "matched": "matched_sure",
+}
+
 
 # manual upload of receipts
 @router.post("/upload")
@@ -35,49 +90,127 @@ async def upload_receipt(file: UploadFile = File(...)):
 
 
 @router.get("")
-def list_receipts():
-    with engine.connect() as conn:
-        result = conn.execute(
-            text("""
-                SELECT r.id, r.image_url, r.file_name, r.file_type, r.source,
-                       r.merchant_name, r.receipt_date, r.tax_amount, r.tax_type,
-                       r.total_amount, r.match_status, r.processing_status, r.created_at,
-                       r.transaction_id, t.merchant as tx_merchant, t.amount_cad as tx_amount,
-                       t.transaction_date as tx_date, r.country, r.city, r.province,
-                       r.subtotal
-                FROM receipts r
-                LEFT JOIN transactions t ON t.id = r.transaction_id
-                ORDER BY r.created_at DESC
-            """)
-        )
-        rows = result.fetchall()
+def list_receipts(
+    view: str = Query("byMonth"),
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    limit: int = Query(20),
+    offset: int = Query(0),
+    match_status: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    statement_id: Optional[str] = Query(None),
+):
+    where_clauses = []
+    params = {}
 
+    # Match status filter
+    if match_status:
+        statuses = [MATCH_STATUS_MAP[s.strip()] for s in match_status.split(",") if s.strip() in MATCH_STATUS_MAP]
+        if statuses:
+            placeholders = ", ".join(f":ms_{i}" for i in range(len(statuses)))
+            where_clauses.append(f"r.match_status IN ({placeholders})")
+            for i, s in enumerate(statuses):
+                params[f"ms_{i}"] = s
+
+    # Statement expand: fetch receipts for a specific statement
+    if statement_id:
+        where_clauses.append("t.statement_id = :statement_id")
+        params["statement_id"] = statement_id
+        where_part = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        sql = f"{_BASE_SELECT}{where_part} ORDER BY r.receipt_date DESC NULLS LAST, r.created_at DESC"
+        with engine.connect() as conn:
+            rows = conn.execute(text(sql), params).fetchall()
+        return {"receipts": [_format_receipt_row(r) for r in rows], "has_more": False}
+
+    # Search view
+    if q and q.strip():
+        where_clauses.append("r.merchant_name ILIKE :q")
+        params["q"] = f"%{q.strip()}%"
+        where_part = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        fetch_limit = limit + 1
+        params["lim"] = fetch_limit
+        params["off"] = offset
+        sql = f"{_BASE_SELECT}{where_part} ORDER BY r.created_at DESC LIMIT :lim OFFSET :off"
+        with engine.connect() as conn:
+            rows = conn.execute(text(sql), params).fetchall()
+        has_more = len(rows) > limit
+        if has_more:
+            rows = rows[:limit]
+        return {"receipts": [_format_receipt_row(r) for r in rows], "has_more": has_more}
+
+    # By Month view
+    if view == "byMonth":
+        import datetime
+        if year and month:
+            month_start = datetime.date(year, month, 1)
+            if month == 12:
+                month_end = datetime.date(year + 1, 1, 1)
+            else:
+                month_end = datetime.date(year, month + 1, 1)
+            # Include receipts in date range OR receipts with no date (if not filtered out by match_status)
+            date_clause = "(r.receipt_date >= :month_start AND r.receipt_date < :month_end)"
+            # Also include no-date receipts unless match_status filter is set
+            if not match_status:
+                date_clause = f"({date_clause} OR r.receipt_date IS NULL)"
+            where_clauses.append(date_clause)
+            params["month_start"] = month_start
+            params["month_end"] = month_end
+        where_part = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        sql = f"{_BASE_SELECT}{where_part} ORDER BY r.receipt_date DESC NULLS LAST, r.created_at DESC"
+        with engine.connect() as conn:
+            rows = conn.execute(text(sql), params).fetchall()
+        return {"receipts": [_format_receipt_row(r) for r in rows], "has_more": False}
+
+    # Recent view (default)
+    where_part = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    fetch_limit = limit + 1
+    params["lim"] = fetch_limit
+    params["off"] = offset
+    sql = f"{_BASE_SELECT}{where_part} ORDER BY r.created_at DESC LIMIT :lim OFFSET :off"
+    with engine.connect() as conn:
+        rows = conn.execute(text(sql), params).fetchall()
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+    return {"receipts": [_format_receipt_row(r) for r in rows], "has_more": has_more}
+
+
+@router.get("/statement-groups")
+def list_statement_groups():
+    """Lightweight endpoint: returns only statement group headers with receipt counts."""
+    sql = """
+        SELECT s.id, ca.name, s.cycle_start, s.cycle_end, COUNT(r.id)
+        FROM receipts r
+        JOIN transactions t ON t.id = r.transaction_id
+        JOIN statements s ON s.id = t.statement_id
+        JOIN card_accounts ca ON ca.id = s.card_account_id
+        WHERE r.match_status IN ('matched_sure', 'matched_unsure')
+        GROUP BY s.id, ca.name, s.cycle_start, s.cycle_end
+        ORDER BY s.cycle_end DESC NULLS LAST
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text(sql)).fetchall()
     return [
         {
-            "id": str(r[0]),
-            "image_url": r[1],
-            "file_name": r[2],
-            "file_type": r[3],
-            "source": r[4],
-            "merchant_name": r[5],
-            "receipt_date": str(r[6]) if r[6] else None,
-            "tax_amount": float(r[7]) if r[7] is not None else None,
-            "tax_type": r[8],
-            "total_amount": float(r[9]) if r[9] is not None else None,
-            "match_status": r[10],
-            "processing_status": r[11],
-            "created_at": str(r[12]),
-            "transaction_id": str(r[13]) if r[13] else None,
-            "tx_merchant": r[14],
-            "tx_amount": float(r[15]) if r[15] is not None else None,
-            "tx_date": str(r[16]) if r[16] else None,
-            "country": r[17],
-            "city": r[18],
-            "province": r[19],
-            "subtotal": float(r[20]) if r[20] is not None else None,
+            "statement_id": str(r[0]),
+            "card_account_name": r[1],
+            "cycle_start": str(r[2]) if r[2] else None,
+            "cycle_end": str(r[3]) if r[3] else None,
+            "receipt_count": r[4],
         }
         for r in rows
     ]
+
+
+@router.get("/processing")
+def list_processing_receipts():
+    """Returns only receipts with pending/processing status for targeted polling."""
+    sql = f"""{_BASE_SELECT} WHERE r.processing_status IN ('pending', 'processing')
+              ORDER BY r.created_at DESC"""
+    with engine.connect() as conn:
+        rows = conn.execute(text(sql)).fetchall()
+    return [_format_receipt_row(r) for r in rows]
+
 
 # receipt metadata
 @router.get("/{receipt_id}")

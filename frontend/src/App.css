@@ -1622,3 +1622,169 @@ tr:hover td { background: #f9fafb; }
 .new-account-form select {
   flex: 0 0 120px;
 }
+
+/* ── Receipts Controls Row ── */
+.receipts-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* ── View Mode Toggle ── */
+.view-mode-toggle {
+  display: flex;
+  background: #f3f4f6;
+  border-radius: 8px;
+  padding: 2px;
+  gap: 0;
+}
+
+.view-mode-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.view-mode-btn:hover {
+  color: #374151;
+}
+
+.view-mode-btn.active {
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.view-mode-toggle.dimmed {
+  opacity: 0.4;
+}
+
+/* ── Receipt Search ── */
+.receipt-search {
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #111827;
+  background: #fff;
+  transition: border-color 0.15s;
+  min-width: 180px;
+}
+
+.receipt-search:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.receipt-search::placeholder {
+  color: #9ca3af;
+}
+
+/* ── Month Picker ── */
+.month-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.month-picker-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  min-width: 160px;
+  text-align: center;
+}
+
+.month-picker-arrow {
+  padding: 4px 10px;
+  font-size: 14px;
+}
+
+/* ── Statement Group ── */
+.statement-group {
+  margin-bottom: 16px;
+}
+
+.statement-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  transition: background 0.15s;
+  text-align: left;
+  margin-bottom: 12px;
+}
+
+.statement-group-header:hover {
+  background: #f3f4f6;
+}
+
+.statement-group-arrow {
+  font-size: 12px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.statement-group-label {
+  font-weight: 600;
+  color: #111827;
+}
+
+.statement-group-count {
+  color: #9ca3af;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+/* ── Filter Chips Disabled State ── */
+.receipt-filter-toggles.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ── No Date Section ── */
+.no-date-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 2px dashed #e5e7eb;
+}
+
+.no-date-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9ca3af;
+  margin-bottom: 12px;
+}
+
+/* ── Load More Button ── */
+.load-more-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.load-more-btn {
+  padding: 8px 24px;
+  font-size: 13px;
+}
