@@ -4,6 +4,7 @@ import { TransactionRow } from './TransactionRow'
 import { ExpenseReportSection } from './ExpenseReportSection'
 import { formatMoney, formatUploadDate } from '../utils/formatters'
 import { API, authFetch } from '../utils/api'
+import { hasRole } from '../utils/roles'
 
 export function StatementsTab({
   statements, currentIndex, currentStatement,
@@ -137,11 +138,15 @@ export function StatementsTab({
         </div>
 
         <div className="action-group">
-          <input ref={fileRef} type="file" accept=".csv" onChange={handleUpload} hidden />
-          <button className="btn btn-primary" onClick={() => fileRef.current.click()} disabled={uploading}>
-            {uploading ? 'Uploading...' : '+ Upload Statement'}
-          </button>
-          {currentStatement && !deleteConfirm && (
+          {hasRole(userRole, 'manager') && (
+            <>
+              <input ref={fileRef} type="file" accept=".csv" onChange={handleUpload} hidden />
+              <button className="btn btn-primary" onClick={() => fileRef.current.click()} disabled={uploading}>
+                {uploading ? 'Uploading...' : '+ Upload Statement'}
+              </button>
+            </>
+          )}
+          {hasRole(userRole, 'manager') && currentStatement && !deleteConfirm && (
             <button className="btn btn-danger" onClick={() => setDeleteConfirm(true)}>Delete</button>
           )}
           {deleteConfirm && (
@@ -195,6 +200,7 @@ export function StatementsTab({
                     setReceiptPreviewTxId={setReceiptPreviewTxId}
                     linkingTxId={linkingTxId}
                     setLinkingTxId={setLinkingTxId}
+                    userRole={userRole}
                   />
                 ))
               )}

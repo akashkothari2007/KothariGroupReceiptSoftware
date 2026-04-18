@@ -7,7 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Query
 from sqlalchemy import text
 from db import engine
-from middleware.auth import get_current_user
+from middleware.auth import get_current_user, require_role
 from services.match_run import run_matching_for_statement
 from services.rules import apply_rules_batch
 
@@ -241,7 +241,7 @@ def list_statements(card_account_id: str = Query(None)):
 
 
 @router.post("/upload")
-async def upload_statement(file: UploadFile = File(...), card_account_id: str = Query(...)):
+async def upload_statement(file: UploadFile = File(...), card_account_id: str = Query(...), user: dict = Depends(require_role("manager"))):
     contents = await file.read()
     text_content = contents.decode("utf-8-sig")
 
@@ -390,7 +390,7 @@ def get_transactions(statement_id: str):
 
 
 @router.delete("/{statement_id}")
-def delete_statement(statement_id: str):
+def delete_statement(statement_id: str, user: dict = Depends(require_role("manager"))):
     matching_status.pop(statement_id, None)
     with engine.begin() as conn:
         # Unlink any receipts matched to this statement's transactions

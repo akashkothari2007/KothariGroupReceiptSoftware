@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import text
 from db import engine
-from middleware.auth import get_current_user
+from middleware.auth import get_current_user, require_role
 from services.match_writer import apply_match, remove_match
 from services.rules import apply_rules
 
@@ -61,7 +61,7 @@ ALLOWED_FIELDS = {
 
 
 @router.patch("/{transaction_id}")
-def update_transaction(transaction_id: str, updates: TransactionUpdate):
+def update_transaction(transaction_id: str, updates: TransactionUpdate, user: dict = Depends(require_role("delegate"))):
     fields = {k: v for k, v in updates.model_dump().items() if v is not None}
     fields = {k: v for k, v in fields.items() if k in ALLOWED_FIELDS}
     if not fields:
@@ -98,7 +98,7 @@ class ManualMatch(BaseModel):
 
 
 @router.post("/{transaction_id}/match")
-def match_transaction(transaction_id: str, body: ManualMatch):
+def match_transaction(transaction_id: str, body: ManualMatch, user: dict = Depends(require_role("delegate"))):
     ok = apply_match(transaction_id, body.receipt_id, "matched_sure", "manual")
     if not ok:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -106,7 +106,7 @@ def match_transaction(transaction_id: str, body: ManualMatch):
 
 
 @router.delete("/{transaction_id}/match")
-def unmatch_transaction(transaction_id: str):
+def unmatch_transaction(transaction_id: str, user: dict = Depends(require_role("delegate"))):
     ok = remove_match(transaction_id)
     if not ok:
         raise HTTPException(status_code=404, detail="No match to remove")

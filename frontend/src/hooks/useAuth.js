@@ -16,8 +16,8 @@ export function useAuth() {
       authFetch(`${API}/users/upsert`, { method: 'POST' })
         .then(() => authFetch(`${API}/users/me`))
         .then(res => res.json())
-        .then(data => setUserRole(data.role || 'editor'))
-        .catch(() => setUserRole('editor'))
+        .then(data => setUserRole(data.role || 'accountant'))
+        .catch(() => setUserRole('accountant'))
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(

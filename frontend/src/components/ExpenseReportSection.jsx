@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
 import { API, authFetch } from '../utils/api'
 import { formatDate, formatMoney, formatUploadDate } from '../utils/formatters'
+import { hasRole } from '../utils/roles'
 
 export function ExpenseReportSection({ transactions, companies, glCodes, statementId, userRole }) {
   const [expandedCompanyId, setExpandedCompanyId] = useState(null)
@@ -208,13 +209,15 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
               >
                 {downloading === expanded.company_id ? 'Generating...' : 'Download PDF'}
               </button>
-              <button
-                className="expense-finalize-btn"
-                onClick={() => handleFinalize(expanded.company_id)}
-                disabled={finalizing === expanded.company_id}
-              >
-                {finalizing === expanded.company_id ? 'Finalizing...' : 'Finalize Report'}
-              </button>
+              {hasRole(userRole, 'delegate') && (
+                <button
+                  className="expense-finalize-btn"
+                  onClick={() => handleFinalize(expanded.company_id)}
+                  disabled={finalizing === expanded.company_id}
+                >
+                  {finalizing === expanded.company_id ? 'Finalizing...' : 'Finalize Report'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -291,7 +294,7 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
                     >
                       {downloading === r.id ? '...' : 'Download'}
                     </button>
-                    {r.status === 'pending' && userRole === 'admin' && (
+                    {r.status === 'pending' && hasRole(userRole, 'manager') && (
                       <button
                         className="report-action-btn approve"
                         onClick={() => handleApprove(r.id)}

@@ -46,22 +46,35 @@ def get_current_user(
     return payload
 
 
-def require_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> dict:
-    """JWT decode + single DB hit to check admin role. Only used on write endpoints."""
-    user = get_current_user(credentials)
-    user_id = user.get("sub")
-    with engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT role FROM user_profiles WHERE id = :id"),
-            {"id": user_id},
-        ).fetchone()
-    role = row[0] if row else "editor"
-    if role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
-    user["role"] = role
-    return user
+ROLE_HIERARCHY = ["accountant", "delegate", "manager", "admin"]
+
+
+def require_role(minimum_role: str):
+    """Returns a FastAPI dependency that checks the user has at least the given role."""
+    min_rank = ROLE_HIERARCHY.index(minimum_role)
+
+    def _checker(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+    ) -> dict:
+        user = get_current_user(credentials)
+        user_id = user.get("sub")
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT role FROM user_profiles WHERE id = :id"),
+                {"id": user_id},
+            ).fetchone()
+        role = row[0] if row else "accountant"
+        rank = ROLE_HIERARCHY.index(role) if role in ROLE_HIERARCHY else 0
+        if rank < min_rank:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{minimum_role} access required",
+            )
+        user["role"] = role
+        return user
+
+    return _checker
+
+
+# Backwards compat alias
+require_admin = require_role("admin")

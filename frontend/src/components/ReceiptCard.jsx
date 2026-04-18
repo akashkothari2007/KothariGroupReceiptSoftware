@@ -14,32 +14,38 @@ export function ReceiptCard({ receipt, receiptMenuOpen, setReceiptMenuOpen, onSe
           </div>
           <ProcessingDot status={receipt.processing_status} />
         </div>
-        <div
-          className="receipt-menu-trigger"
-          onClick={e => {
-            e.stopPropagation()
-            setReceiptMenuOpen(receiptMenuOpen === receipt.id ? null : receipt.id)
-          }}
-        >
-          &#x22EF;
-        </div>
-        {receiptMenuOpen === receipt.id && (
-          <div className="receipt-menu" onClick={e => e.stopPropagation()}>
-            {(receipt.processing_status === 'failed' || receipt.processing_status === 'completed') && (
-              <button
-                className="receipt-menu-item"
-                onClick={() => onRetry(receipt.id)}
-              >
-                Retry
-              </button>
-            )}
-            <button
-              className="receipt-menu-item receipt-menu-delete"
-              onClick={() => onDelete(receipt.id)}
+        {(onDelete || onRetry) && (
+          <>
+            <div
+              className="receipt-menu-trigger"
+              onClick={e => {
+                e.stopPropagation()
+                setReceiptMenuOpen(receiptMenuOpen === receipt.id ? null : receipt.id)
+              }}
             >
-              Delete
-            </button>
-          </div>
+              &#x22EF;
+            </div>
+            {receiptMenuOpen === receipt.id && (
+              <div className="receipt-menu" onClick={e => e.stopPropagation()}>
+                {onRetry && (receipt.processing_status === 'failed' || receipt.processing_status === 'completed') && (
+                  <button
+                    className="receipt-menu-item"
+                    onClick={() => onRetry(receipt.id)}
+                  >
+                    Retry
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    className="receipt-menu-item receipt-menu-delete"
+                    onClick={() => onDelete(receipt.id)}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -65,7 +71,7 @@ export function ReceiptCard({ receipt, receiptMenuOpen, setReceiptMenuOpen, onSe
         <span className={`receipt-badge ${receipt.match_status || 'unmatched'}`}>
           {receiptMatchLabel(receipt.match_status)}
         </span>
-        {receipt.match_status === 'matched_unsure' && (
+        {receipt.match_status === 'matched_unsure' && onConfirmMatch && (
           <button
             className="receipt-confirm-btn-card"
             onClick={e => { e.stopPropagation(); onConfirmMatch(receipt.id) }}

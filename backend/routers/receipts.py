@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from supabase import create_client
 from db import engine
-from middleware.auth import get_current_user
+from middleware.auth import get_current_user, require_role
 from services.receipt_ingest import ingest_receipt_bytes, _run_extraction_bg, _run_email_body_extraction_bg
 from services.match_run import run_matching_for_receipt
 from services.match_writer import remove_match
@@ -76,7 +76,7 @@ MATCH_STATUS_MAP = {
 
 # manual upload of receipts
 @router.post("/upload")
-async def upload_receipt(file: UploadFile = File(...)):
+async def upload_receipt(file: UploadFile = File(...), user: dict = Depends(require_role("delegate"))):
     logger.info(f"Upload request: filename={file.filename}, content_type={file.content_type}, size={file.size}")
     contents = await file.read()
     try:
@@ -351,7 +351,7 @@ def _sync_receipt_edits_to_transaction(receipt_id: str, transaction_id: str, fie
 
 
 @router.patch("/{receipt_id}")
-def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
+def patch_receipt(receipt_id: str, updates: ReceiptUpdate, user: dict = Depends(require_role("delegate"))):
     fields = {k: v for k, v in updates.model_dump().items() if v is not None and k in RECEIPT_ALLOWED_FIELDS}
     if not fields:
         return {"updated": False}
@@ -411,7 +411,7 @@ def patch_receipt(receipt_id: str, updates: ReceiptUpdate):
 
 
 @router.post("/{receipt_id}/retry")
-async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
+async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks, user: dict = Depends(require_role("delegate"))):
     """Re-process a failed receipt extraction."""
     with engine.connect() as conn:
         row = conn.execute(
@@ -451,7 +451,7 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks):
 
 
 @router.post("/{receipt_id}/rematch")
-def rematch_receipt(receipt_id: str):
+def rematch_receipt(receipt_id: str, user: dict = Depends(require_role("delegate"))):
     """Re-run matching for this receipt against all transactions."""
     with engine.connect() as conn:
         row = conn.execute(
@@ -475,7 +475,7 @@ def rematch_receipt(receipt_id: str):
 
 
 @router.delete("/{receipt_id}/match")
-def unmatch_receipt(receipt_id: str):
+def unmatch_receipt(receipt_id: str, user: dict = Depends(require_role("delegate"))):
     """Remove the match on this receipt (unlinks from transaction)."""
     with engine.connect() as conn:
         row = conn.execute(
@@ -511,7 +511,7 @@ def get_receipt_url(receipt_id: str):
 
 
 @router.delete("/{receipt_id}")
-def delete_receipt(receipt_id: str):
+def delete_receipt(receipt_id: str, user: dict = Depends(require_role("delegate"))):
     # Fetch the receipt to get the storage path
     with engine.connect() as conn:
         result = conn.execute(

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { API, authFetch } from '../utils/api'
+import { hasRole } from '../utils/roles'
 
 function FieldInput({ field, value, onChange }) {
   if (field.type === 'select') {
@@ -208,7 +209,9 @@ function UserManagement() {
                   onChange={e => handleRoleChange(u.id, e.target.value)}
                   disabled={updating === u.id}
                 >
-                  <option value="editor">Editor</option>
+                  <option value="accountant">Accountant</option>
+                  <option value="delegate">Delegate</option>
+                  <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
                 </select>
               </td>
@@ -225,7 +228,7 @@ export function SettingsTab({ companies, glCodes, expenseTypes, onRefresh, userR
   const [vendorMappings, setVendorMappings] = useState([])
   const [cityRules, setCityRules] = useState([])
 
-  const isAdmin = userRole === 'admin'
+  const isAdmin = hasRole(userRole, 'admin')
   const readOnly = !isAdmin
 
   useEffect(() => {

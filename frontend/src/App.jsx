@@ -747,6 +747,7 @@ function App() {
           statementGroups={statementGroups}
           expandedStatements={expandedStatements}
           onExpandStatement={handleExpandStatement}
+          userRole={userRole}
         />
       )}
 

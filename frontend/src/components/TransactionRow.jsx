@@ -1,11 +1,18 @@
 import { formatDate, formatMoney } from '../utils/formatters'
+import { hasRole } from '../utils/roles'
 
 export function TransactionRow({
   tx, companies, glCodes, expenseTypes, receipts,
   updateTransaction, handleManualMatch, handleUnmatch, handleConfirmMatch,
   showReceiptPreview, receiptPreviewTxId, receiptPreviewUrl, receiptPreviewLoading,
-  setReceiptPreviewTxId, linkingTxId, setLinkingTxId,
+  setReceiptPreviewTxId, linkingTxId, setLinkingTxId, userRole,
 }) {
+  const canEdit = hasRole(userRole, 'delegate')
+
+  const companyName = tx.company_id ? (companies.find(c => c.id === tx.company_id)?.name || '—') : '—'
+  const glDisplay = tx.gl_code_id ? (() => { const g = glCodes.find(g => g.id === tx.gl_code_id); return g ? `${g.code} — ${g.name}` : '—' })() : '—'
+  const expenseTypeName = tx.expense_type_id ? (expenseTypes.find(e => e.id === tx.expense_type_id)?.name || '—') : '—'
+
   return (
     <tr className={tx.amount_cad < 0 ? 'credit-row' : ''} data-tx-id={tx.id}>
       <td className="date-cell">{formatDate(tx.transaction_date)}</td>
@@ -13,21 +20,27 @@ export function TransactionRow({
         <div className="merchant-text">{tx.merchant || ''}</div>
       </td>
       <td className="location-cell">
-        <input
-          type="text"
-          value={tx.city || ''}
-          onChange={e => updateTransaction(tx.id, 'city', e.target.value)}
-          className="cell-input"
-          placeholder="City"
-          style={{ marginBottom: 2 }}
-        />
-        <input
-          type="text"
-          value={tx.country || ''}
-          onChange={e => updateTransaction(tx.id, 'country', e.target.value)}
-          className="cell-input cell-input-secondary"
-          placeholder="Country"
-        />
+        {canEdit ? (
+          <>
+            <input
+              type="text"
+              value={tx.city || ''}
+              onChange={e => updateTransaction(tx.id, 'city', e.target.value)}
+              className="cell-input"
+              placeholder="City"
+              style={{ marginBottom: 2 }}
+            />
+            <input
+              type="text"
+              value={tx.country || ''}
+              onChange={e => updateTransaction(tx.id, 'country', e.target.value)}
+              className="cell-input cell-input-secondary"
+              placeholder="Country"
+            />
+          </>
+        ) : (
+          <span className="cell-text">{[tx.city, tx.country].filter(Boolean).join(', ') || '—'}</span>
+        )}
       </td>
       <td className="amount-cell">
         {formatMoney(tx.amount_cad)}
@@ -38,53 +51,69 @@ export function TransactionRow({
         )}
       </td>
       <td className="amount-cell tax-cell">
-        <input
-          type="number"
-          step="0.01"
-          value={tx.tax_amount != null ? tx.tax_amount : ''}
-          onChange={e => {
-            const val = e.target.value
-            updateTransaction(tx.id, 'tax_amount', val === '' ? null : parseFloat(val))
-          }}
-          className="cell-input cell-input-num"
-          placeholder="—"
-        />
+        {canEdit ? (
+          <input
+            type="number"
+            step="0.01"
+            value={tx.tax_amount != null ? tx.tax_amount : ''}
+            onChange={e => {
+              const val = e.target.value
+              updateTransaction(tx.id, 'tax_amount', val === '' ? null : parseFloat(val))
+            }}
+            className="cell-input cell-input-num"
+            placeholder="—"
+          />
+        ) : (
+          <span className="cell-text">{tx.tax_amount != null ? formatMoney(tx.tax_amount) : '—'}</span>
+        )}
       </td>
       <td>
-        <select
-          value={tx.company_id || ''}
-          onChange={e => updateTransaction(tx.id, 'company_id', e.target.value, true)}
-          className="cell-select"
-        >
-          <option value="">—</option>
-          {companies.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+        {canEdit ? (
+          <select
+            value={tx.company_id || ''}
+            onChange={e => updateTransaction(tx.id, 'company_id', e.target.value, true)}
+            className="cell-select"
+          >
+            <option value="">—</option>
+            {companies.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="cell-text">{companyName}</span>
+        )}
       </td>
       <td>
-        <select
-          value={tx.gl_code_id || ''}
-          onChange={e => updateTransaction(tx.id, 'gl_code_id', e.target.value, true)}
-          className="cell-select"
-        >
-          <option value="">—</option>
-          {glCodes.map(g => (
-            <option key={g.id} value={g.id}>{g.code} — {g.name}</option>
-          ))}
-        </select>
+        {canEdit ? (
+          <select
+            value={tx.gl_code_id || ''}
+            onChange={e => updateTransaction(tx.id, 'gl_code_id', e.target.value, true)}
+            className="cell-select"
+          >
+            <option value="">—</option>
+            {glCodes.map(g => (
+              <option key={g.id} value={g.id}>{g.code} — {g.name}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="cell-text">{glDisplay}</span>
+        )}
       </td>
       <td>
-        <select
-          value={tx.expense_type_id || ''}
-          onChange={e => updateTransaction(tx.id, 'expense_type_id', e.target.value, true)}
-          className="cell-select"
-        >
-          <option value="">—</option>
-          {expenseTypes.map(et => (
-            <option key={et.id} value={et.id}>{et.name}</option>
-          ))}
-        </select>
+        {canEdit ? (
+          <select
+            value={tx.expense_type_id || ''}
+            onChange={e => updateTransaction(tx.id, 'expense_type_id', e.target.value, true)}
+            className="cell-select"
+          >
+            <option value="">—</option>
+            {expenseTypes.map(et => (
+              <option key={et.id} value={et.id}>{et.name}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="cell-text">{expenseTypeName}</span>
+        )}
       </td>
       <td className="receipt-cell">
         {tx.matched_receipt_id ? (
@@ -96,18 +125,20 @@ export function TransactionRow({
             >
               {tx.receipt_merchant || tx.receipt_file_name || 'Matched'}
             </span>
-            {tx.match_status === 'matched_unsure' && (
+            {canEdit && tx.match_status === 'matched_unsure' && (
               <button
                 className="receipt-confirm-btn"
                 onClick={() => handleConfirmMatch(tx.matched_receipt_id)}
                 title="Confirm match"
               >&#x2713;</button>
             )}
-            <button
-              className="receipt-unmatch-btn"
-              onClick={() => handleUnmatch(tx.id)}
-              title="Remove match"
-            >&times;</button>
+            {canEdit && (
+              <button
+                className="receipt-unmatch-btn"
+                onClick={() => handleUnmatch(tx.id)}
+                title="Remove match"
+              >&times;</button>
+            )}
             {receiptPreviewTxId === tx.id && (
               <div className="receipt-popup" onClick={e => e.stopPropagation()}>
                 <div className="receipt-popup-header">
@@ -147,7 +178,7 @@ export function TransactionRow({
               </div>
             )}
           </div>
-        ) : (
+        ) : canEdit ? (
           <div className="receipt-link-wrapper">
             <button
               className="receipt-link-btn"
@@ -174,6 +205,8 @@ export function TransactionRow({
               </div>
             )}
           </div>
+        ) : (
+          <span className="cell-text">—</span>
         )}
       </td>
     </tr>

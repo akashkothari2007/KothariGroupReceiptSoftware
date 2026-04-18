@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ShimmerCards } from './ShimmerCards'
 import { ReceiptCard } from './ReceiptCard'
+import { hasRole } from '../utils/roles'
 
 function formatMonth(year, month) {
   // month is 1-12 from API convention
@@ -72,7 +73,9 @@ export function ReceiptsTab({
   hasMore, onLoadMore,
   pickerYear, pickerMonth, onMonthChange,
   statementGroups, expandedStatements, onExpandStatement,
+  userRole,
 }) {
+  const canEdit = hasRole(userRole, 'delegate')
   const toggle = (key) => setReceiptFilter(prev => ({ ...prev, [key]: !prev[key] }))
 
   const filtersDisabled = viewMode === 'byStatement' && !searchQuery
@@ -87,25 +90,29 @@ export function ReceiptsTab({
     ? statementGroups.reduce((sum, g) => sum + g.receipt_count, 0)
     : receipts.length
 
-  const cardProps = { receiptMenuOpen, setReceiptMenuOpen, onSelect: setSelectedReceipt, onDelete: handleReceiptDelete, onRetry: handleReceiptRetry, onConfirmMatch: handleConfirmMatch }
+  const cardProps = { receiptMenuOpen, setReceiptMenuOpen, onSelect: setSelectedReceipt, onDelete: canEdit ? handleReceiptDelete : null, onRetry: canEdit ? handleReceiptRetry : null, onConfirmMatch: canEdit ? handleConfirmMatch : null }
 
   return (
     <div className="receipts-tab">
       <div className="receipts-toolbar">
-        <input
-          ref={receiptFileRef}
-          type="file"
-          accept="image/jpeg,image/png,application/pdf,image/heic,image/heif" multiple
-          onChange={handleReceiptUpload}
-          hidden
-        />
-        <button
-          className="btn btn-primary"
-          onClick={() => receiptFileRef.current.click()}
-          disabled={uploadingReceipt}
-        >
-          {uploadingReceipt ? 'Uploading...' : '+ Upload Receipt'}
-        </button>
+        {canEdit && (
+          <>
+            <input
+              ref={receiptFileRef}
+              type="file"
+              accept="image/jpeg,image/png,application/pdf,image/heic,image/heif" multiple
+              onChange={handleReceiptUpload}
+              hidden
+            />
+            <button
+              className="btn btn-primary"
+              onClick={() => receiptFileRef.current.click()}
+              disabled={uploadingReceipt}
+            >
+              {uploadingReceipt ? 'Uploading...' : '+ Upload Receipt'}
+            </button>
+          </>
+        )}
         <span className="receipts-count">
           {!loadingReceipts && `${displayCount} receipt${displayCount !== 1 ? 's' : ''}`}
         </span>
