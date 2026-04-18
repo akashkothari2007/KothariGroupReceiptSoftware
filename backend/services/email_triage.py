@@ -56,6 +56,17 @@ async def pick_receipt_candidates(candidates: list[dict]) -> list[dict]:
     if not image_candidates:
         return []
 
+    # PDFs are almost always receipts/invoices — skip AI triage for them
+    pdf_candidates = [c for c in image_candidates if c["content_type"] == "application/pdf"]
+    non_pdf_candidates = [c for c in image_candidates if c["content_type"] != "application/pdf"]
+    if pdf_candidates:
+        logger.info(f"Auto-accepting {len(pdf_candidates)} PDF attachment(s) as receipt candidates")
+    if not non_pdf_candidates:
+        return pdf_candidates
+
+    # Only run AI triage on non-PDF image candidates
+    image_candidates = non_pdf_candidates
+
     thumbnails = []
     for c in image_candidates:
         if c["content_type"] == "application/pdf":
@@ -70,7 +81,7 @@ async def pick_receipt_candidates(candidates: list[dict]) -> list[dict]:
 
     valid_thumbs = [(i, t) for i, t in enumerate(thumbnails) if t is not None]
     if not valid_thumbs:
-        return _heuristic_filter(image_candidates)
+        return pdf_candidates + _heuristic_filter(image_candidates)
 
     try:
         all_thumb_bytes = [t for _, t in valid_thumbs]
@@ -78,7 +89,7 @@ async def pick_receipt_candidates(candidates: list[dict]) -> list[dict]:
 
         if not isinstance(result, list):
             logger.warning(f"Triage AI returned non-list: {result}")
-            return _heuristic_filter(image_candidates)
+            return pdf_candidates + _heuristic_filter(image_candidates)
 
         selected = []
         for item in result:
@@ -87,9 +98,9 @@ async def pick_receipt_candidates(candidates: list[dict]) -> list[dict]:
                 original_idx = valid_thumbs[idx][0]
                 selected.append(image_candidates[original_idx])
 
-        logger.info(f"AI triage: {len(selected)}/{len(image_candidates)} candidates selected as receipts")
-        return selected
+        logger.info(f"AI triage: {len(selected)}/{len(image_candidates)} image candidates selected as receipts")
+        return pdf_candidates + selected
 
     except Exception as e:
         logger.error(f"AI triage failed, using heuristic fallback: {e}", exc_info=True)
-        return _heuristic_filter(image_candidates)
+        return pdf_candidates + _heuristic_filter(image_candidates)

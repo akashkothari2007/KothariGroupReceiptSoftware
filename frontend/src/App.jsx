@@ -330,6 +330,7 @@ function App() {
           invalidateReceiptsCache()
           fetchReceiptsForView({ skipCache: true })
           fetchUnmatchedReceipts()
+          if (currentId) fetchTransactions(currentId, true)
           return
         }
         // Update processing receipts in-place
