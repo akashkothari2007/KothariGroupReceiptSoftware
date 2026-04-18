@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { formatDate, formatMoney } from '../utils/formatters'
 import { hasRole } from '../utils/roles'
 
@@ -8,6 +9,7 @@ export function TransactionRow({
   setReceiptPreviewTxId, linkingTxId, setLinkingTxId, userRole,
 }) {
   const canEdit = hasRole(userRole, 'delegate')
+  const [linkSearch, setLinkSearch] = useState('')
 
   const companyName = tx.company_id ? (companies.find(c => c.id === tx.company_id)?.name || '—') : '—'
   const glDisplay = tx.gl_code_id ? (() => { const g = glCodes.find(g => g.id === tx.gl_code_id); return g ? `${g.code} — ${g.name}` : '—' })() : '—'
@@ -188,10 +190,23 @@ export function TransactionRow({
             </button>
             {linkingTxId === tx.id && (
               <div className="receipt-link-dropdown" onClick={e => e.stopPropagation()}>
-                {receipts.filter(r => !r.match_status || r.match_status === 'unmatched').length === 0 ? (
-                  <div className="receipt-link-empty">No unmatched receipts</div>
-                ) : (
-                  receipts.filter(r => !r.match_status || r.match_status === 'unmatched').map(r => (
+                <input
+                  className="receipt-link-search"
+                  type="text"
+                  placeholder="Search vendor..."
+                  value={linkSearch}
+                  onChange={e => setLinkSearch(e.target.value)}
+                  autoFocus
+                />
+                {(() => {
+                  const unmatched = receipts.filter(r => !r.match_status || r.match_status === 'unmatched')
+                  const q = linkSearch.toLowerCase()
+                  const filtered = q ? unmatched.filter(r =>
+                    (r.merchant_name || r.file_name || '').toLowerCase().includes(q)
+                  ) : unmatched
+                  if (unmatched.length === 0) return <div className="receipt-link-empty">No unmatched receipts</div>
+                  if (filtered.length === 0) return <div className="receipt-link-empty">No matches for "{linkSearch}"</div>
+                  return filtered.map(r => (
                     <button
                       key={r.id}
                       className="receipt-link-option"
@@ -201,7 +216,7 @@ export function TransactionRow({
                       <span className="receipt-link-amount">{r.total_amount != null ? formatMoney(r.total_amount) : ''}</span>
                     </button>
                   ))
-                )}
+                })()}
               </div>
             )}
           </div>
