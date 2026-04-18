@@ -310,15 +310,25 @@ def approve_report(report_id: str, user: dict = Depends(require_role("manager"))
 # ── Delete ──────────────────────────────────────────────────────────────
 
 @router.delete("/{report_id}")
-def delete_report(report_id: str):
+def delete_report(report_id: str, user: dict = Depends(require_role("delegate"))):
     with engine.begin() as conn:
         row = conn.execute(
-            text("SELECT pdf_storage_path FROM expense_reports WHERE id = :rid"),
+            text("SELECT pdf_storage_path, status FROM expense_reports WHERE id = :rid"),
             {"rid": report_id},
         ).fetchone()
 
         if not row:
             raise HTTPException(status_code=404, detail="Report not found")
+
+        user_role = user.get("role", "accountant")
+        report_status = row[1]
+
+        # Accountants cannot delete any reports
+        # Delegates can only delete pending reports, not approved ones
+        if user_role == "accountant":
+            raise HTTPException(status_code=403, detail="Accountants cannot delete reports")
+        if user_role == "delegate" and report_status == "approved":
+            raise HTTPException(status_code=403, detail="Delegates cannot delete approved reports")
 
         conn.execute(
             text("DELETE FROM expense_reports WHERE id = :rid"),

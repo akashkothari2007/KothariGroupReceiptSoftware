@@ -76,6 +76,7 @@ export function ReceiptsTab({
   userRole,
 }) {
   const canEdit = hasRole(userRole, 'delegate')
+  const canDelete = hasRole(userRole, 'manager')
   const toggle = (key) => setReceiptFilter(prev => ({ ...prev, [key]: !prev[key] }))
 
   const filtersDisabled = viewMode === 'byStatement' && !searchQuery
@@ -90,7 +91,7 @@ export function ReceiptsTab({
     ? statementGroups.reduce((sum, g) => sum + g.receipt_count, 0)
     : receipts.length
 
-  const cardProps = { receiptMenuOpen, setReceiptMenuOpen, onSelect: setSelectedReceipt, onDelete: canEdit ? handleReceiptDelete : null, onRetry: canEdit ? handleReceiptRetry : null, onConfirmMatch: canEdit ? handleConfirmMatch : null }
+  const cardProps = { receiptMenuOpen, setReceiptMenuOpen, onSelect: setSelectedReceipt, onDelete: canDelete ? handleReceiptDelete : null, onRetry: canEdit ? handleReceiptRetry : null, onConfirmMatch: canEdit ? handleConfirmMatch : null }
 
   return (
     <div className="receipts-tab">

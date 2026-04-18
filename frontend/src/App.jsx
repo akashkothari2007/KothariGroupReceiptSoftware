@@ -817,6 +817,7 @@ function App() {
           onRematch={(id) => handleReceiptRematch(id)}
           onConfirmMatch={(id) => handleConfirmMatch(id)}
           rematchingReceiptId={rematchingReceiptId}
+          userRole={userRole}
           onUpdate={(id, field, value) => {
             const parsed = ['subtotal', 'tax_amount', 'total_amount'].includes(field) && value !== ''
               ? parseFloat(value) : value

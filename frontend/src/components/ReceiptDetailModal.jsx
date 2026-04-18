@@ -3,7 +3,8 @@ import { useDebounce } from '../hooks/useDebounce'
 import { API, authFetch, getReceiptUrl } from '../utils/api'
 import { ProcessingDot } from './ProcessingDot'
 
-export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch, onConfirmMatch, onGoToTransaction, rematchingReceiptId }) {
+export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch, onConfirmMatch, onGoToTransaction, rematchingReceiptId, userRole }) {
+  const isAccountant = userRole === 'accountant'
   const [fileUrl, setFileUrl] = useState(null)
   const [htmlContent, setHtmlContent] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
@@ -108,23 +109,23 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
           <div className="receipt-meta-list">
             <div className="meta-row">
               <span className="meta-label">Merchant</span>
-              <input className="meta-input" value={fields.merchant_name} onChange={e => handleChange('merchant_name', e.target.value)} placeholder="—" />
+              <input className="meta-input" value={fields.merchant_name} onChange={e => handleChange('merchant_name', e.target.value)} placeholder="—" readOnly={isAccountant} />
             </div>
             <div className="meta-row">
               <span className="meta-label">Receipt date</span>
-              <input className="meta-input" type="date" value={fields.receipt_date} onChange={e => handleChange('receipt_date', e.target.value)} />
+              <input className="meta-input" type="date" value={fields.receipt_date} onChange={e => handleChange('receipt_date', e.target.value)} readOnly={isAccountant} />
             </div>
             <div className="meta-row">
               <span className="meta-label">Subtotal</span>
-              <input className="meta-input meta-input-num" value={fields.subtotal} onChange={e => handleChange('subtotal', e.target.value)} placeholder="—" />
+              <input className="meta-input meta-input-num" value={fields.subtotal} onChange={e => handleChange('subtotal', e.target.value)} placeholder="—" readOnly={isAccountant} />
             </div>
             <div className="meta-row">
               <span className="meta-label">Tax amount</span>
-              <input className="meta-input meta-input-num" value={fields.tax_amount} onChange={e => handleChange('tax_amount', e.target.value)} placeholder="—" />
+              <input className="meta-input meta-input-num" value={fields.tax_amount} onChange={e => handleChange('tax_amount', e.target.value)} placeholder="—" readOnly={isAccountant} />
             </div>
             <div className="meta-row">
               <span className="meta-label">Tax type</span>
-              <select className="meta-select" value={fields.tax_type} onChange={e => handleChange('tax_type', e.target.value)}>
+              <select className="meta-select" value={fields.tax_type} onChange={e => handleChange('tax_type', e.target.value)} disabled={isAccountant}>
                 <option value="">—</option>
                 <option value="HST">HST</option>
                 <option value="GST">GST</option>
@@ -133,19 +134,19 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
             </div>
             <div className="meta-row">
               <span className="meta-label">Total amount</span>
-              <input className="meta-input meta-input-num" value={fields.total_amount} onChange={e => handleChange('total_amount', e.target.value)} placeholder="—" />
+              <input className="meta-input meta-input-num" value={fields.total_amount} onChange={e => handleChange('total_amount', e.target.value)} placeholder="—" readOnly={isAccountant} />
             </div>
             <div className="meta-row">
               <span className="meta-label">City</span>
-              <input className="meta-input" value={fields.city} onChange={e => handleChange('city', e.target.value)} placeholder="—" style={{ maxWidth: 140 }} />
+              <input className="meta-input" value={fields.city} onChange={e => handleChange('city', e.target.value)} placeholder="—" style={{ maxWidth: 140 }} readOnly={isAccountant} />
             </div>
             <div className="meta-row">
               <span className="meta-label">Province</span>
-              <input className="meta-input" value={fields.province} onChange={e => handleChange('province', e.target.value)} placeholder="—" style={{ maxWidth: 80 }} />
+              <input className="meta-input" value={fields.province} onChange={e => handleChange('province', e.target.value)} placeholder="—" style={{ maxWidth: 80 }} readOnly={isAccountant} />
             </div>
             <div className="meta-row">
               <span className="meta-label">Country</span>
-              <input className="meta-input" value={fields.country} onChange={e => handleChange('country', e.target.value)} placeholder="CA" style={{ maxWidth: 80 }} />
+              <input className="meta-input" value={fields.country} onChange={e => handleChange('country', e.target.value)} placeholder="CA" style={{ maxWidth: 80 }} readOnly={isAccountant} />
             </div>
             <div className="meta-row">
               <span className="meta-label">Source</span>
@@ -169,7 +170,7 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
                 </span>
               </div>
             )}
-            {receipt.processing_status === 'completed' && (
+            {receipt.processing_status === 'completed' && !isAccountant && (
               <div className="meta-row" style={{ gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #333', paddingTop: 10, marginTop: 4 }}>
                 {receipt.transaction_id && onUnmatch && (
                   <button

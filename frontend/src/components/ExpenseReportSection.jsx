@@ -303,13 +303,16 @@ export function ExpenseReportSection({ transactions, companies, glCodes, stateme
                         {approving === r.id ? '...' : 'Approve'}
                       </button>
                     )}
-                    <button
-                      className="report-action-btn delete"
-                      onClick={() => handleDeleteReport(r.id)}
-                      disabled={deleting === r.id}
-                    >
-                      {deleting === r.id ? '...' : 'Delete'}
-                    </button>
+                    {/* Accountants: no delete. Delegates: only pending. Manager+: any. */}
+                    {userRole !== 'accountant' && !(userRole === 'delegate' && r.status === 'approved') && (
+                      <button
+                        className="report-action-btn delete"
+                        onClick={() => handleDeleteReport(r.id)}
+                        disabled={deleting === r.id}
+                      >
+                        {deleting === r.id ? '...' : 'Delete'}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

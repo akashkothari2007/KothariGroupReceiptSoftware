@@ -352,6 +352,9 @@ def _sync_receipt_edits_to_transaction(receipt_id: str, transaction_id: str, fie
 
 @router.patch("/{receipt_id}")
 def patch_receipt(receipt_id: str, updates: ReceiptUpdate, user: dict = Depends(require_role("delegate"))):
+    user_role = user.get("role", "accountant")
+    if user_role == "accountant":
+        raise HTTPException(status_code=403, detail="Accountants cannot edit receipts")
     fields = {k: v for k, v in updates.model_dump().items() if v is not None and k in RECEIPT_ALLOWED_FIELDS}
     if not fields:
         return {"updated": False}
@@ -453,6 +456,9 @@ async def retry_receipt(receipt_id: str, background_tasks: BackgroundTasks, user
 @router.post("/{receipt_id}/rematch")
 def rematch_receipt(receipt_id: str, user: dict = Depends(require_role("delegate"))):
     """Re-run matching for this receipt against all transactions."""
+    user_role = user.get("role", "accountant")
+    if user_role == "accountant":
+        raise HTTPException(status_code=403, detail="Accountants cannot rematch receipts")
     with engine.connect() as conn:
         row = conn.execute(
             text("SELECT processing_status FROM receipts WHERE id = :id"),
@@ -477,6 +483,9 @@ def rematch_receipt(receipt_id: str, user: dict = Depends(require_role("delegate
 @router.delete("/{receipt_id}/match")
 def unmatch_receipt(receipt_id: str, user: dict = Depends(require_role("delegate"))):
     """Remove the match on this receipt (unlinks from transaction)."""
+    user_role = user.get("role", "accountant")
+    if user_role == "accountant":
+        raise HTTPException(status_code=403, detail="Accountants cannot unmatch receipts")
     with engine.connect() as conn:
         row = conn.execute(
             text("SELECT transaction_id FROM receipts WHERE id = :id"),
@@ -511,7 +520,7 @@ def get_receipt_url(receipt_id: str):
 
 
 @router.delete("/{receipt_id}")
-def delete_receipt(receipt_id: str, user: dict = Depends(require_role("delegate"))):
+def delete_receipt(receipt_id: str, user: dict = Depends(require_role("manager"))):
     # Fetch the receipt to get the storage path
     with engine.connect() as conn:
         result = conn.execute(
