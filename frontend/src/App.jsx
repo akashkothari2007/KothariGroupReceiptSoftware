@@ -459,6 +459,20 @@ function App() {
     }
   }
 
+  const handleToggleLock = async (txId, locked) => {
+    setTransactions(prev => prev.map(t => t.id === txId ? { ...t, is_locked: locked } : t))
+    try {
+      const res = await authFetch(`${API}/transactions/${txId}/lock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locked }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setTransactions(prev => prev.map(t => t.id === txId ? { ...t, is_locked: !locked } : t))
+    }
+  }
+
   // ── Match handlers ──
   const handleManualMatch = async (txId, receiptId) => {
     setLinkingTxId(null)
@@ -576,11 +590,15 @@ function App() {
 
     try {
       const res = await authFetch(`${API}/receipts/${receiptId}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || 'Delete failed')
+      }
       invalidateReceiptsCache()
       if (currentId) fetchTransactions(currentId, true)
       fetchUnmatchedReceipts()
-    } catch {
+    } catch (err) {
+      if (err.message.includes('locked')) alert(err.message)
       setReceipts(prev => [...prev, removed].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)))
     }
   }
@@ -755,6 +773,7 @@ function App() {
           linkingTxId={linkingTxId}
           setLinkingTxId={setLinkingTxId}
           rulesApplyingTxId={rulesApplyingTxId}
+          handleToggleLock={handleToggleLock}
           handleUpload={handleUpload}
           handleDelete={handleDelete}
           fileRef={fileRef}

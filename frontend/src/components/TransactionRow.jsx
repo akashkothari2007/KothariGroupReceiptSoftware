@@ -6,9 +6,11 @@ export function TransactionRow({
   tx, companies, glCodes, expenseTypes, receipts,
   updateTransaction, handleManualMatch, handleUnmatch, handleConfirmMatch,
   showReceiptPreview, receiptPreviewTxId, receiptPreviewUrl, receiptPreviewLoading,
-  setReceiptPreviewTxId, linkingTxId, setLinkingTxId, rulesApplyingTxId, userRole,
+  setReceiptPreviewTxId, linkingTxId, setLinkingTxId, rulesApplyingTxId, handleToggleLock, userRole,
 }) {
-  const canEdit = hasRole(userRole, 'delegate')
+  const hasEditRole = hasRole(userRole, 'delegate')
+  const isLocked = tx.is_locked
+  const canEdit = hasEditRole && !isLocked
   const [linkSearch, setLinkSearch] = useState('')
 
   const isApplyingRules = rulesApplyingTxId === tx.id
@@ -17,7 +19,18 @@ export function TransactionRow({
   const expenseTypeName = tx.expense_type_id ? (expenseTypes.find(e => e.id === tx.expense_type_id)?.name || '—') : '—'
 
   return (
-    <tr className={tx.amount_cad < 0 ? 'credit-row' : ''} data-tx-id={tx.id}>
+    <tr className={`${tx.amount_cad < 0 ? 'credit-row' : ''}${isLocked ? ' locked-row' : ''}`} data-tx-id={tx.id}>
+      <td className="lock-cell">
+        {hasEditRole && (
+          <button
+            className={`lock-btn${isLocked ? ' locked' : ''}`}
+            onClick={() => handleToggleLock(tx.id, !isLocked)}
+            title={isLocked ? 'Unlock transaction' : 'Lock transaction'}
+          >
+            {isLocked ? '✓' : '○'}
+          </button>
+        )}
+      </td>
       <td className="date-cell">{formatDate(tx.transaction_date)}</td>
       <td className="merchant-cell">
         <div className="merchant-text">{tx.merchant || ''}</div>

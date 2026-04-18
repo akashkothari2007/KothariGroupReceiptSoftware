@@ -77,6 +77,7 @@ def run_matching_for_statement(statement_id: str) -> list:
                 text(f"""
                     SELECT {_TX_COLS} FROM transactions
                     WHERE statement_id = :sid AND matched_receipt_id IS NULL
+                      AND is_locked = FALSE
                 """),
                 {"sid": statement_id},
             ).fetchall()
@@ -145,6 +146,7 @@ def run_matching_for_receipt(receipt_id: str) -> list:
                     SELECT {_TX_COLS} FROM transactions
                     WHERE (matched_receipt_id IS NULL
                        OR match_status = 'matched_unsure')
+                      AND is_locked = FALSE
                     {date_filter}
                 """),
                 params,

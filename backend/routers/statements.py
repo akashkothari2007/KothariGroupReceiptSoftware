@@ -355,7 +355,8 @@ def get_transactions(statement_id: str):
                        r.file_name as receipt_file_name,
                        r.merchant_name as receipt_merchant,
                        r.file_type as receipt_file_type,
-                       t.city, t.province, t.country
+                       t.city, t.province, t.country,
+                       t.is_locked
                 FROM transactions t
                 LEFT JOIN receipts r ON r.id = t.matched_receipt_id
                 WHERE t.statement_id = :sid
@@ -384,6 +385,7 @@ def get_transactions(statement_id: str):
             "city": r[16],
             "province": r[17],
             "country": r[18],
+            "is_locked": bool(r[19]) if r[19] is not None else False,
         }
         for r in rows
     ]

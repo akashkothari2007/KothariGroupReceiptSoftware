@@ -521,6 +521,15 @@ def get_receipt_url(receipt_id: str):
 
 @router.delete("/{receipt_id}")
 def delete_receipt(receipt_id: str, user: dict = Depends(require_role("manager"))):
+    # Check if receipt is matched to a locked transaction
+    with engine.connect() as conn:
+        locked_tx = conn.execute(
+            text("SELECT t.is_locked FROM transactions t WHERE t.matched_receipt_id = :id"),
+            {"id": receipt_id},
+        ).fetchone()
+    if locked_tx and locked_tx[0]:
+        raise HTTPException(status_code=403, detail="Receipt is matched to a locked transaction. Unlock the transaction first.")
+
     # Fetch the receipt to get the storage path
     with engine.connect() as conn:
         result = conn.execute(

@@ -14,7 +14,7 @@ export function StatementsTab({
   updateTransaction, handleManualMatch, handleUnmatch, handleConfirmMatch,
   showReceiptPreview, receiptPreviewTxId, receiptPreviewUrl, receiptPreviewLoading,
   setReceiptPreviewTxId, linkingTxId, setLinkingTxId,
-  rulesApplyingTxId,
+  rulesApplyingTxId, handleToggleLock,
   handleUpload, handleDelete, fileRef,
   cardAccounts, selectedAccountId, setSelectedAccountId, fetchCardAccounts,
   userRole,
@@ -166,6 +166,7 @@ export function StatementsTab({
           <table>
             <thead>
               <tr>
+                <th className="lock-col"></th>
                 <th>Date</th>
                 <th>Merchant</th>
                 <th>Location</th>
@@ -181,7 +182,7 @@ export function StatementsTab({
               {loadingTx ? (
                 <ShimmerRows />
               ) : transactions.length === 0 ? (
-                <tr><td colSpan={9} className="empty-cell">No transactions in this statement.</td></tr>
+                <tr><td colSpan={10} className="empty-cell">No transactions in this statement.</td></tr>
               ) : (
                 transactions.map(tx => (
                   <TransactionRow
@@ -203,6 +204,7 @@ export function StatementsTab({
                     linkingTxId={linkingTxId}
                     setLinkingTxId={setLinkingTxId}
                     rulesApplyingTxId={rulesApplyingTxId}
+                    handleToggleLock={handleToggleLock}
                     userRole={userRole}
                   />
                 ))

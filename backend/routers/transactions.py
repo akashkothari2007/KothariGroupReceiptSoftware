@@ -62,6 +62,15 @@ ALLOWED_FIELDS = {
 
 @router.patch("/{transaction_id}")
 def update_transaction(transaction_id: str, updates: TransactionUpdate, user: dict = Depends(require_role("delegate"))):
+    # Check if transaction is locked
+    with engine.connect() as conn:
+        locked = conn.execute(
+            text("SELECT is_locked FROM transactions WHERE id = :tid"),
+            {"tid": transaction_id},
+        ).fetchone()
+    if locked and locked[0]:
+        raise HTTPException(status_code=403, detail="Transaction is locked")
+
     fields = {k: v for k, v in updates.model_dump().items() if v is not None}
     fields = {k: v for k, v in fields.items() if k in ALLOWED_FIELDS}
     if not fields:
@@ -99,6 +108,13 @@ class ManualMatch(BaseModel):
 
 @router.post("/{transaction_id}/match")
 def match_transaction(transaction_id: str, body: ManualMatch, user: dict = Depends(require_role("delegate"))):
+    with engine.connect() as conn:
+        locked = conn.execute(
+            text("SELECT is_locked FROM transactions WHERE id = :tid"),
+            {"tid": transaction_id},
+        ).fetchone()
+    if locked and locked[0]:
+        raise HTTPException(status_code=403, detail="Transaction is locked")
     ok = apply_match(transaction_id, body.receipt_id, "matched_sure", "manual")
     if not ok:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -107,7 +123,33 @@ def match_transaction(transaction_id: str, body: ManualMatch, user: dict = Depen
 
 @router.delete("/{transaction_id}/match")
 def unmatch_transaction(transaction_id: str, user: dict = Depends(require_role("delegate"))):
+    with engine.connect() as conn:
+        locked = conn.execute(
+            text("SELECT is_locked FROM transactions WHERE id = :tid"),
+            {"tid": transaction_id},
+        ).fetchone()
+    if locked and locked[0]:
+        raise HTTPException(status_code=403, detail="Transaction is locked")
     ok = remove_match(transaction_id)
     if not ok:
         raise HTTPException(status_code=404, detail="No match to remove")
     return {"unmatched": True}
+
+
+class LockUpdate(BaseModel):
+    locked: bool
+
+
+@router.patch("/{transaction_id}/lock")
+def toggle_lock(transaction_id: str, body: LockUpdate, user: dict = Depends(require_role("delegate"))):
+    user_role = user.get("role", "accountant")
+    if user_role == "accountant":
+        raise HTTPException(status_code=403, detail="Accountants cannot lock transactions")
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("UPDATE transactions SET is_locked = :locked WHERE id = :tid"),
+            {"locked": body.locked, "tid": transaction_id},
+        )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {"is_locked": body.locked}
