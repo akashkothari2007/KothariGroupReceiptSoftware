@@ -65,9 +65,14 @@ def _match_city(city: str, province: str, rules: list[dict]) -> str | None:
         if r["city"] == city_lower and r["province"] and province_upper and r["province"] == province_upper:
             return r["company_id"]
 
-    # Second pass: city-only rules (where province is NULL)
+    # Second pass: city-only rules (where province is NULL in the rule)
     for r in rules:
         if r["city"] == city_lower and not r["province"]:
+            return r["company_id"]
+
+    # Third pass: city match ignoring province (e.g. Mastercard has no province)
+    for r in rules:
+        if r["city"] == city_lower:
             return r["company_id"]
 
     return None

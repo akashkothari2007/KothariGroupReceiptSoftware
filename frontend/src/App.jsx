@@ -270,17 +270,17 @@ function App() {
     fetchReceiptsForView()
   }, [receiptViewMode, receiptFilter, pickerYear, pickerMonth, activeTab])
 
-  // Debounced search
+  // Debounced search (also re-fetches when filter changes mid-search)
   useEffect(() => {
     if (activeTab !== 'receipts') return
     if (!receiptSearchQuery.trim()) return // handled by the main effect above
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     searchTimerRef.current = setTimeout(() => {
       setReceiptsOffset(0)
-      fetchReceiptsForView()
+      fetchReceiptsForView({ skipCache: true })
     }, 300)
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
-  }, [receiptSearchQuery, activeTab])
+  }, [receiptSearchQuery, receiptFilter, activeTab])
 
   // When search is cleared, the main effect above handles the refetch
 
