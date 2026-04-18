@@ -842,6 +842,9 @@ function App() {
               ? parseFloat(value) : value
             setReceipts(prev => prev.map(r => r.id === id ? { ...r, [field]: parsed } : r))
             setSelectedReceipt(prev => prev && prev.id === id ? { ...prev, [field]: parsed } : prev)
+            if (['city', 'province', 'country', 'tax_amount', 'tax_type'].includes(field) && currentId) {
+              fetchTransactions(currentId, true)
+            }
           }}
         />
       )}

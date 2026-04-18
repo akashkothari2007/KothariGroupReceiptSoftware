@@ -120,6 +120,17 @@ async def extract_receipt_data(receipt_id: str, storage_path: str, file_type: st
             if val is not None and val != "null" and val != "":
                 fields[db_key] = val
 
+        # Default receipt_date to upload date if AI didn't return one
+        if "receipt_date" not in fields:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT created_at FROM receipts WHERE id = :id"),
+                    {"id": receipt_id},
+                ).fetchone()
+            if row and row[0]:
+                fields["receipt_date"] = row[0].strftime("%Y-%m-%d")
+                logger.info(f"[{receipt_id}] No date from AI — defaulting to upload date {fields['receipt_date']}")
+
         # Negate total_amount for refunds so it matches negative tx amounts
         is_refund = result.get("is_refund")
         if is_refund is True and fields.get("total_amount") is not None:
