@@ -6,11 +6,12 @@ export function TransactionRow({
   tx, companies, glCodes, expenseTypes, receipts,
   updateTransaction, handleManualMatch, handleUnmatch, handleConfirmMatch,
   showReceiptPreview, receiptPreviewTxId, receiptPreviewUrl, receiptPreviewLoading,
-  setReceiptPreviewTxId, linkingTxId, setLinkingTxId, userRole,
+  setReceiptPreviewTxId, linkingTxId, setLinkingTxId, rulesApplyingTxId, userRole,
 }) {
   const canEdit = hasRole(userRole, 'delegate')
   const [linkSearch, setLinkSearch] = useState('')
 
+  const isApplyingRules = rulesApplyingTxId === tx.id
   const companyName = tx.company_id ? (companies.find(c => c.id === tx.company_id)?.name || '—') : '—'
   const glDisplay = tx.gl_code_id ? (() => { const g = glCodes.find(g => g.id === tx.gl_code_id); return g ? `${g.code} — ${g.name}` : '—' })() : '—'
   const expenseTypeName = tx.expense_type_id ? (expenseTypes.find(e => e.id === tx.expense_type_id)?.name || '—') : '—'
@@ -69,7 +70,7 @@ export function TransactionRow({
           <span className="cell-text">{tx.tax_amount != null ? formatMoney(tx.tax_amount) : '—'}</span>
         )}
       </td>
-      <td>
+      <td className={isApplyingRules ? 'rules-applying' : ''}>
         {canEdit ? (
           <select
             value={tx.company_id || ''}
@@ -85,7 +86,7 @@ export function TransactionRow({
           <span className="cell-text">{companyName}</span>
         )}
       </td>
-      <td>
+      <td className={isApplyingRules ? 'rules-applying' : ''}>
         {canEdit ? (
           <select
             value={tx.gl_code_id || ''}
@@ -101,7 +102,7 @@ export function TransactionRow({
           <span className="cell-text">{glDisplay}</span>
         )}
       </td>
-      <td>
+      <td className={isApplyingRules ? 'rules-applying' : ''}>
         {canEdit ? (
           <select
             value={tx.expense_type_id || ''}

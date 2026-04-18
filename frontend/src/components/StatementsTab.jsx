@@ -14,6 +14,7 @@ export function StatementsTab({
   updateTransaction, handleManualMatch, handleUnmatch, handleConfirmMatch,
   showReceiptPreview, receiptPreviewTxId, receiptPreviewUrl, receiptPreviewLoading,
   setReceiptPreviewTxId, linkingTxId, setLinkingTxId,
+  rulesApplyingTxId,
   handleUpload, handleDelete, fileRef,
   cardAccounts, selectedAccountId, setSelectedAccountId, fetchCardAccounts,
   userRole,
@@ -122,6 +123,7 @@ export function StatementsTab({
                 <span className="statement-meta">
                   {currentStatement.transaction_count} transactions &middot; {formatMoney(currentStatement.total_amount)} &middot; {formatUploadDate(currentStatement.uploaded_at)}
                   {currentStatement.matching_status === 'matching' && <span style={{color: '#f0a500', marginLeft: 8}}>Matching...</span>}
+                  {currentStatement.matching_status !== 'matching' && loadingTx && <span style={{color: '#3b82f6', marginLeft: 8}}>Refreshing...</span>}
                 </span>
                 <span className="statement-counter">
                   {currentIndex + 1} of {statements.length}
@@ -200,6 +202,7 @@ export function StatementsTab({
                     setReceiptPreviewTxId={setReceiptPreviewTxId}
                     linkingTxId={linkingTxId}
                     setLinkingTxId={setLinkingTxId}
+                    rulesApplyingTxId={rulesApplyingTxId}
                     userRole={userRole}
                   />
                 ))

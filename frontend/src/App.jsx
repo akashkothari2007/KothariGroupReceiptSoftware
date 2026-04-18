@@ -41,6 +41,8 @@ function App() {
   const [receiptViewMode, setReceiptViewMode] = useState('byMonth')
   const [receiptSearchQuery, setReceiptSearchQuery] = useState('')
   const [linkingTxId, setLinkingTxId] = useState(null)
+  const [rematchingReceiptId, setRematchingReceiptId] = useState(null)
+  const [rulesApplyingTxId, setRulesApplyingTxId] = useState(null)
   const [receiptPreviewTxId, setReceiptPreviewTxId] = useState(null)
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState(null)
   const [receiptPreviewLoading, setReceiptPreviewLoading] = useState(false)
@@ -392,7 +394,10 @@ function App() {
         const prev = statements.find(s => s.id === currentId)
         const curr = data.find(s => s.id === currentId)
         if (prev?.matching_status === 'matching' && curr?.matching_status !== 'matching') {
-          if (currentId) fetchTransactions(currentId, true)
+          // Non-silent fetch so the table visibly refreshes; small delay for DB commits
+          setTimeout(() => {
+            if (currentId) fetchTransactions(currentId, false)
+          }, 500)
           invalidateReceiptsCache()
           if (activeTab === 'receipts') fetchReceiptsForView({ skipCache: true })
           fetchUnmatchedReceipts()
@@ -469,6 +474,7 @@ function App() {
       tx_merchant: tx?.merchant, tx_amount: tx?.amount_cad, tx_date: tx?.transaction_date,
     } : r))
     setUnmatchedReceipts(prev => prev.filter(r => r.id !== receiptId))
+    setRulesApplyingTxId(txId)
     try {
       const res = await authFetch(`${API}/transactions/${txId}/match`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -476,8 +482,10 @@ function App() {
       })
       if (!res.ok) throw new Error()
       invalidateReceiptsCache()
-      if (currentId) fetchTransactions(currentId, true)
+      if (currentId) await fetchTransactions(currentId, true)
+      setRulesApplyingTxId(null)
     } catch {
+      setRulesApplyingTxId(null)
       // Revert
       setTransactions(prev => prev.map(t => t.id === txId ? {
         ...t, matched_receipt_id: null, match_status: 'unmatched',
@@ -607,23 +615,61 @@ function App() {
   }
 
   const handleReceiptRematch = async (receiptId) => {
+    setRematchingReceiptId(receiptId)
+    let prevTx = null
+    let prevStatus = null
+    try {
+      const snapRes = await authFetch(`${API}/receipts/${receiptId}`)
+      if (snapRes.ok) {
+        const snap = await snapRes.json()
+        prevTx = snap.transaction_id ?? null
+        prevStatus = snap.match_status ?? null
+      }
+    } catch {}
+
     try {
       await authFetch(`${API}/receipts/${receiptId}/rematch`, { method: 'POST' })
-      // Poll to pick up the new match
-      setTimeout(async () => {
-        try {
-          invalidateReceiptsCache()
-          fetchReceiptsForView({ skipCache: true })
-          fetchUnmatchedReceipts()
+    } catch {
+      setRematchingReceiptId(null)
+      return
+    }
+
+    const delayMs = 400
+    const maxAttempts = 12
+    const finalize = async () => {
+      try {
+        invalidateReceiptsCache()
+        await fetchReceiptsForView({ skipCache: true })
+        fetchUnmatchedReceipts()
+        const res = await authFetch(`${API}/receipts/${receiptId}`)
+        if (res.ok) {
+          const updated = await res.json()
           setSelectedReceipt(prev => {
             if (!prev || prev.id !== receiptId) return prev
-            const updated = receipts.find(r => r.id === receiptId)
-            return updated || prev
+            return updated
           })
-          if (currentId) fetchTransactions(currentId, true)
-        } catch {}
-      }, 2000)
-    } catch {}
+        }
+        if (currentId) fetchTransactions(currentId, true)
+      } catch {}
+      setRematchingReceiptId(null)
+    }
+
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(r => setTimeout(r, delayMs))
+      try {
+        const res = await authFetch(`${API}/receipts/${receiptId}`)
+        if (!res.ok) continue
+        const updated = await res.json()
+        const txNow = updated.transaction_id ?? null
+        const stNow = updated.match_status ?? null
+        const changed = txNow !== prevTx || stNow !== prevStatus
+        if (changed || i === maxAttempts - 1) {
+          await finalize()
+          return
+        }
+      } catch {}
+    }
+    await finalize()
   }
 
   const handleConfirmMatch = async (receiptId) => {
@@ -708,6 +754,7 @@ function App() {
           setReceiptPreviewTxId={setReceiptPreviewTxId}
           linkingTxId={linkingTxId}
           setLinkingTxId={setLinkingTxId}
+          rulesApplyingTxId={rulesApplyingTxId}
           handleUpload={handleUpload}
           handleDelete={handleDelete}
           fileRef={fileRef}
@@ -769,6 +816,7 @@ function App() {
           onUnmatch={(id) => handleReceiptUnmatch(id)}
           onRematch={(id) => handleReceiptRematch(id)}
           onConfirmMatch={(id) => handleConfirmMatch(id)}
+          rematchingReceiptId={rematchingReceiptId}
           onUpdate={(id, field, value) => {
             const parsed = ['subtotal', 'tax_amount', 'total_amount'].includes(field) && value !== ''
               ? parseFloat(value) : value

@@ -1806,3 +1806,19 @@ tr:hover td { background: #f9fafb; }
   padding: 8px 24px;
   font-size: 13px;
 }
+
+/* ── Rules Applying Pulse ── */
+.rules-applying {
+  animation: rulesPulse 1s ease-in-out infinite;
+}
+
+@keyframes rulesPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Find Match / re-match while search is in progress */
+.find-match-searching {
+  opacity: 0.7;
+  pointer-events: none;
+}

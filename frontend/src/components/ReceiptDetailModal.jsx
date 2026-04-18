@@ -3,7 +3,7 @@ import { useDebounce } from '../hooks/useDebounce'
 import { API, authFetch, getReceiptUrl } from '../utils/api'
 import { ProcessingDot } from './ProcessingDot'
 
-export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch, onConfirmMatch, onGoToTransaction }) {
+export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnmatch, onRematch, onConfirmMatch, onGoToTransaction, rematchingReceiptId }) {
   const [fileUrl, setFileUrl] = useState(null)
   const [htmlContent, setHtmlContent] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
@@ -189,10 +189,13 @@ export function ReceiptDetailModal({ receipt, onClose, onUpdate, onRetry, onUnma
                 )}
                 {onRematch && (
                   <button
-                    style={{ padding: '5px 14px', fontSize: 12, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                    type="button"
+                    className={rematchingReceiptId === receipt.id ? 'find-match-searching' : ''}
+                    style={{ padding: '5px 14px', fontSize: 12, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, cursor: rematchingReceiptId === receipt.id ? 'default' : 'pointer' }}
                     onClick={() => onRematch(receipt.id)}
+                    disabled={rematchingReceiptId === receipt.id}
                   >
-                    {receipt.transaction_id ? 'Re-match' : 'Find Match'}
+                    {rematchingReceiptId === receipt.id ? 'Searching...' : receipt.transaction_id ? 'Re-match' : 'Find Match'}
                   </button>
                 )}
               </div>
